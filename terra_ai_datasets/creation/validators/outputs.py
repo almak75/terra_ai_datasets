@@ -5,6 +5,8 @@ from pydantic import BaseModel
 from pydantic.types import PositiveInt
 from pydantic.color import Color
 
+from terra_ai_datasets.creation.validators.inputs import ImageProcessTypes
+
 
 class RegressionScalers(str, Enum):
     none = None
@@ -19,6 +21,9 @@ class ClassificationValidator(BaseModel):
 class SegmentationValidator(BaseModel):
     rgb_range: PositiveInt
     classes: Dict[str, Color]
+    height: Optional[PositiveInt]
+    width: Optional[PositiveInt]
+    process: Optional[ImageProcessTypes]
 
 
 class RegressionValidator(BaseModel):

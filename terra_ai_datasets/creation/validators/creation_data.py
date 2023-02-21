@@ -15,7 +15,7 @@ class CSVData(BaseModel):
 class PutData(BaseModel):
     csv_data: Optional[CSVData]
     folder_path: Optional[List[Path]]
-    parameters: dict
+    parameters: Any
 
 
 class InputData(PutData):
@@ -39,7 +39,7 @@ class OutputData(PutData):
 
 
 class BaseInstructionsData(BaseModel):
-    parameters: dict
+    parameters: Any
     preprocess: dict = {}
     columns: Dict[str, List]
 

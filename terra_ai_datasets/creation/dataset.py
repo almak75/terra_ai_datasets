@@ -1,10 +1,12 @@
 import os
-from typing import Union, List, Dict
+from abc import ABC, abstractmethod
+from typing import Union, List, Dict, Any
 
+import numpy as np
 import pandas as pd
 
-from terra_ai_datasets.creation import creation_data
-from terra_ai_datasets.creation.creation_data import InputData, OutputData, CSVData, InputInstructionsData, \
+from terra_ai_datasets.creation.validators import creation_data
+from terra_ai_datasets.creation.validators.creation_data import InputData, OutputData, CSVData, InputInstructionsData, \
     OutputInstructionsData
 from terra_ai_datasets.creation.validators import dataset
 from terra_ai_datasets.creation.validators import inputs, outputs
@@ -12,11 +14,24 @@ from terra_ai_datasets.creation.validators.tasks import LayerInputTypeChoice, La
     LayerSelectTypeChoice
 
 
+class Array(ABC):
+
+    @abstractmethod
+    def create(self, source: Any, parameters: Any):
+        pass
+
+    # @abstractmethod
+    # def preprocess(self, array: np.ndarray, preprocess, **options):
+    #     pass
+
+
 class CreateDataset:
     data = None
-    dataframe: pd.DataFrame = None
     input_type: LayerInputTypeChoice = None
     output_type: LayerOutputTypeChoice = None
+    dataframe: Dict[str, pd.DataFrame] = {}
+    X = Dict[str, Dict[int, np.ndarray]]
+    Y = Dict[str, Dict[int, np.ndarray]]
 
     _is_validated = False
     _is_prepared = False
@@ -36,6 +51,7 @@ class CreateDataset:
         self.output_instructions = self.create_put_instructions(
             put_data=self.output, put_type='Output', start_idx=len(self.input_instructions) + 1
         )
+        self.dataframe = self.create_table(self.input_instructions, self.output_instructions)
         self._is_prepared = True
 
     def validate(self, instance, **kwargs):
@@ -100,13 +116,46 @@ class CreateDataset:
             )
         return new_put_data
 
-    def create(self):
+    @staticmethod
+    def create_table(input_instructions: Dict[int, InputInstructionsData],
+                     output_instructions: Dict[int, OutputInstructionsData],
+                     shuffle: bool = True,
+                     split_ratio: List[int] = (70, 30)
+                     ) -> Dict[str, pd.DataFrame]:
+
+        def create_put_table(put_instructions):
+            dict_data = {}
+            for put_id, put_data in put_instructions.items():
+                dict_data.update(put_data.columns)
+            return dict_data
+
+        csv_data = {}
+        csv_data.update(create_put_table(input_instructions))
+        csv_data.update(create_put_table(output_instructions))
+        dataframe = pd.DataFrame.from_dict(csv_data)
+
+        if shuffle:
+            dataframe = dataframe.sample(frac=1)
+
+        train_split, val_split = split_ratio
+        train_dataframe, val_dataframe = np.split(
+            dataframe, [int(train_split / 100 * len(dataframe))]
+        )
+        dataframe = {"train": train_dataframe.reset_index(drop=True), "val": val_dataframe.reset_index(drop=True)}
+
+        return dataframe
+
+    @staticmethod
+    def create(input_instructions: Dict[int, InputInstructionsData],
+               output_instructions: Dict[int, OutputInstructionsData]):
+        # X = {"train": {1: np.ndarray}}
         pass
 
     def summary(self):
         if not self._is_validated:
             raise
-        print(self.dataframe.head())
+        if self._is_prepared:
+            print(self.dataframe['train'].head())
 
     def load(self):
         pass
