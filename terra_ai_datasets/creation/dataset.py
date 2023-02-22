@@ -5,6 +5,7 @@ from typing import Union, List, Dict, Any
 import numpy as np
 import pandas as pd
 
+from terra_ai_datasets.creation import arrays
 from terra_ai_datasets.creation.validators import creation_data
 from terra_ai_datasets.creation.validators.creation_data import InputData, OutputData, CSVData, InputInstructionsData, \
     OutputInstructionsData
@@ -14,24 +15,13 @@ from terra_ai_datasets.creation.validators.tasks import LayerInputTypeChoice, La
     LayerSelectTypeChoice
 
 
-class Array(ABC):
-
-    @abstractmethod
-    def create(self, source: Any, parameters: Any):
-        pass
-
-    # @abstractmethod
-    # def preprocess(self, array: np.ndarray, preprocess, **options):
-    #     pass
-
-
 class CreateDataset:
     data = None
     input_type: LayerInputTypeChoice = None
     output_type: LayerOutputTypeChoice = None
     dataframe: Dict[str, pd.DataFrame] = {}
-    X = Dict[str, Dict[int, np.ndarray]]
-    Y = Dict[str, Dict[int, np.ndarray]]
+    X: Dict[str, Dict[int, np.ndarray]] = {}
+    Y: Dict[str, Dict[int, np.ndarray]] = {}
 
     _is_validated = False
     _is_prepared = False
@@ -145,11 +135,26 @@ class CreateDataset:
 
         return dataframe
 
+    def create(self):
+        if self._is_prepared:
+            for split, dataframe in self.dataframe.items():
+                self.X[split], self.Y[split] = {}, {}
+                for inp_id, inp_data in self.input_instructions.items():
+                    self.X[split][inp_id] = self.create_arrays(inp_data, dataframe)
+                for out_id, out_data in self.output_instructions.items():
+                    self.Y[split][out_id] = self.create_arrays(out_data, dataframe)
+
     @staticmethod
-    def create(input_instructions: Dict[int, InputInstructionsData],
-               output_instructions: Dict[int, OutputInstructionsData]):
-        # X = {"train": {1: np.ndarray}}
-        pass
+    def create_arrays(put_data: Union[InputInstructionsData, OutputInstructionsData],
+                      dataframe: pd.DataFrame) -> np.ndarray:
+        row_array = []
+        for row_idx in range(len(dataframe)):
+            for col_name in put_data.columns.keys():
+                sample_array = getattr(arrays, f"{put_data.type}Array")().create(dataframe.loc[row_idx, col_name],
+                                                                                 put_data.parameters)
+                row_array.append(sample_array)
+
+        return np.array(row_array)
 
     def summary(self):
         if not self._is_validated:

@@ -51,9 +51,9 @@ class ImageSegmentation(CreateDataset):
         outputs_data[0].parameters.height = inputs_data[0].parameters.height
         outputs_data[0].parameters.width = inputs_data[0].parameters.width
         outputs_data[0].parameters.process = inputs_data[0].parameters.process
+        outputs_data[0].folder_path = self.data.target_path
 
         return inputs_data, outputs_data
-
 
     def summary(self):
         super().summary()

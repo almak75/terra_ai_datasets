@@ -1,10 +1,23 @@
+from abc import ABC, abstractmethod
+from typing import Any
+
 import numpy as np
 from PIL import Image
 
-from terra_ai_datasets.creation.dataset import Array
 from terra_ai_datasets.creation.utils import resize_frame
 from terra_ai_datasets.creation.validators.inputs import ImageNetworkTypes, ImageValidator
 from terra_ai_datasets.creation.validators.outputs import SegmentationValidator
+
+
+class Array(ABC):
+
+    @abstractmethod
+    def create(self, source: Any, parameters: Any):
+        pass
+
+    # @abstractmethod
+    # def preprocess(self, array: np.ndarray, preprocess, **options):
+    #     pass
 
 
 class ImageArray(Array):
@@ -13,11 +26,9 @@ class ImageArray(Array):
 
         image = Image.open(source)
         array = np.asarray(image)
-        # frame_mode = options['image_mode'] if 'image_mode' in options.keys() else 'stretch'  # Временное решение
-        # array = resize_frame(image_array=array,
-        #                      target_shape=(parameters.height, parameters.width),
-        #                      frame_mode=parameters.process)
-
+        array = resize_frame(image_array=array,
+                             target_shape=(parameters.height, parameters.width),
+                             frame_mode=parameters.process)
         if parameters.network == ImageNetworkTypes.linear:
             array = array.reshape(np.prod(np.array(array.shape)))
 
