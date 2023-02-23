@@ -1,12 +1,10 @@
 from datetime import datetime
-from typing import Optional, Dict, Any, Tuple, List, Union
+from typing import Optional, Dict, Tuple, List
 
 from pydantic import BaseModel
 from pydantic.color import Color
 from pydantic.types import PositiveInt
 
-from terra_ai_datasets.creation.validators.dataset import ImageClassificationValidator, ImageSegmentationValidator, \
-    TextClassificationValidator
 from terra_ai_datasets.creation.validators.tasks import TasksChoice, LayerDatatypeChoice, LayerEncodingChoice, \
     LayerInputTypeChoice, LayerOutputTypeChoice
 
@@ -30,16 +28,13 @@ class DatasetOutputsData(DatasetLayerData):
     output_type: LayerOutputTypeChoice
 
 
-class CreationData(BaseModel):
-    inputs: Dict[PositiveInt, Union[ImageClassificationValidator, ImageSegmentationValidator,
-                 TextClassificationValidator]]
-    outputs: Dict[PositiveInt, Union[ImageClassificationValidator, ImageSegmentationValidator, TextClassificationValidator]]
-
-
 class DatasetData(BaseModel):
     task: TasksChoice
     use_generator: bool
     date: datetime = datetime.now().isoformat()
     inputs: Optional[Dict[PositiveInt, DatasetInputsData]] = {}
     outputs: Optional[Dict[PositiveInt, DatasetOutputsData]] = {}
-    columns: Optional[Dict[PositiveInt, Dict[str, Any]]] = {}
+    # columns: Optional[Dict[PositiveInt, Dict[str, Any]]] = {}
+
+    class Config:
+        use_enum_values = True

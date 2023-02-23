@@ -26,7 +26,7 @@ class ImageValidator(BaseModel):
     width: PositiveInt
     network: ImageNetworkTypes = ImageNetworkTypes.convolutional
     process: ImageProcessTypes = ImageProcessTypes.stretch
-    image_scaler: ImageScalers = ImageScalers.none
+    preprocessing: ImageScalers = ImageScalers.none
 
 
 # --- Text validators ---
@@ -45,4 +45,5 @@ class TextValidator(BaseModel):
     filters: str = '–—!"#$%&()*+,-./:;<=>?@[\\]^«»№_`{|}~\t\n\xa0–\ufeff'
     max_words_count: PositiveInt
     text_format: TextFormatTypes
+    preprocessing: TextProcessTypes
     pymorphy: bool

@@ -1,6 +1,7 @@
 from typing import Dict
 
 from terra_ai_datasets.creation.dataset import CreateDataset
+from terra_ai_datasets.creation.validators.inputs import ImageScalers
 from terra_ai_datasets.creation.validators.tasks import LayerInputTypeChoice, LayerOutputTypeChoice, \
     LayerSelectTypeChoice
 
@@ -14,13 +15,12 @@ class ImageClassification(CreateDataset):
             source_path: list,
             width: int,
             height: int,
-            scaler: str,
+            preprocessing: str,
             network: str,
             process: str,
     ):
-        super().__init__(source_path=source_path, width=width, height=height, scaler=scaler, network=network,
-                         process=process)
-
+        super().__init__(source_path=source_path, width=width, height=height, preprocessing=preprocessing,
+                         network=network, process=process)
 
     def summary(self):
         super().summary()
@@ -35,16 +35,18 @@ class ImageSegmentation(CreateDataset):
             self,
             source_path: list,
             target_path: list,
+            train_size: int,
             width: int,
             height: int,
-            scaler: str,
             network: str,
             process: str,
             rgb_range: int,
-            classes: Dict[str, list]
+            classes: Dict[str, list],
+            preprocessing: str = ImageScalers.none
     ):
-        super().__init__(source_path=source_path, target_path=target_path, width=width, height=height, scaler=scaler,
-                         network=network, process=process, rgb_range=rgb_range, classes=classes)
+        super().__init__(source_path=source_path, target_path=target_path, train_size=train_size,  width=width,
+                         height=height, preprocessing=preprocessing, network=network, process=process,
+                         rgb_range=rgb_range, classes=classes)
 
     def preprocess_put_data(self, data, data_type: LayerSelectTypeChoice):
         inputs_data, outputs_data = super().preprocess_put_data(data, data_type)
