@@ -70,6 +70,13 @@ class CreateDataset:
                     parameters=inp.parameters
                 ))
             for out in data.outputs:
+                # TODO Сделать общую функцию предобработки данных в зависимости от типа задачи
+                if out.type == LayerOutputTypeChoice.Segmentation:
+                    for inp in data.inputs:
+                        if inp.type == LayerInputTypeChoice.Image:
+                            out.parameters.height = inp.parameters.height
+                            out.parameters.width = inp.parameters.width
+                            out.parameters.process = inp.parameters.process
                 outputs_data.append(OutputData(
                     csv_data=CSVData(csv_path=data.csv_path, columns=out.columns),
                     type=out.type,
@@ -100,6 +107,8 @@ class CreateDataset:
                 csv_table = pd.read_csv(put.csv_data.csv_path, usecols=put.csv_data.columns)
                 for column in put.csv_data.columns:
                     data_to_pass = csv_table.loc[:, column].tolist()
+                    if put.type in [LayerInputTypeChoice.Image, LayerOutputTypeChoice.Segmentation]:
+                        data_to_pass = [put.csv_data.csv_path.parent.joinpath(elem) for elem in data_to_pass]
                     columns[f"{idx}_{column}"] = data_to_pass
 
             elif put.folder_path:
@@ -171,6 +180,8 @@ class CreateDataset:
                             arr_data[put_id], preprocessing, put_data.parameters
                         )
 
+            self._is_created = True
+
             return arr_data, preproc_data
 
         if self._is_prepared:
@@ -214,6 +225,14 @@ class CreateDataset:
             raise
         if self._is_prepared:
             print(self.dataframe['train'].head())
+            print(f"\n\033[1mКол-во примеров в train выборке:\033[0m {len(self.dataframe['train'])}\n"
+                  f"\033[1mКол-во примеров в val выборке:\033[0m {len(self.dataframe['val'])}")
+            print()
+            if self._is_created:
+                for inp_id, array in enumerate(self.X["train"].values(), 1):
+                    print(f"\033[1mРазмерность входного массива {inp_id}:\033[0m", array[0].shape)
+                for out_id, array in enumerate(self.Y["train"].values(), 1):
+                    print(f"\033[1mРазмерность выходного массива {out_id}:\033[0m", array[0].shape)
 
     def save(self, save_path: str) -> None:
 
@@ -265,3 +284,7 @@ class CreateClassificationDataset(CreateDataset):
                 type=put.type, parameters=put.parameters, columns=columns
             )
         return new_put_data
+
+    def summary(self):
+        super().summary()
+        print(f"\n\033[1mСписок классов:\033[0m", ' '.join(self.output[0].parameters.classes_names))

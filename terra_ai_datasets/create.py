@@ -28,10 +28,6 @@ class ImageClassification(CreateClassificationDataset):
         super().__init__(source_path=source_path, train_size=train_size, width=width, height=height, network=network,
                          process=process, preprocessing=preprocessing, one_hot_encoding=one_hot_encoding)
 
-    def summary(self):
-        super().summary()
-        print("столько то классов и тд")
-
 
 class ImageSegmentation(CreateDataset):
     input_type = LayerInputTypeChoice.Image
@@ -92,15 +88,7 @@ class TextClassification(CreateClassificationDataset):
                          length=length, step=step, pymorphy=pymorphy, one_hot_encoding=one_hot_encoding
                          )
 
-    def summary(self):
-        super().summary()
-        print("столько то классов и тд")
-
 
 class DataframeDataset(CreateDataset):
     input_type = LayerInputTypeChoice.Dataframe
     output_type = "Dataset"
-
-    def summary(self):
-        super().summary()
-        print("столько то классов и тд")

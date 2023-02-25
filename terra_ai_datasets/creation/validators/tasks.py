@@ -40,7 +40,6 @@ class LayerOutputTypeChoice(str, Enum):
     Classification = "Classification"
     Segmentation = "Segmentation"
     Regression = "Regression"
-    # Dataframe = "Dataframe"
     Timeseries = "Timeseries"
     TimeseriesTrend = "TimeseriesTrend"
 
