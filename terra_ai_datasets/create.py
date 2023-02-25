@@ -84,11 +84,12 @@ class TextClassification(CreateClassificationDataset):
             max_words: int = None,
             length: int = None,
             step: int = None,
-            pymorphy: bool = False
+            pymorphy: bool = False,
+            one_hot_encoding: bool = True
     ):
         super().__init__(source_path=source_path, train_size=train_size, preprocessing=preprocessing,
                          max_words_count=max_words_count, mode=mode, filters=filters, max_words=max_words,
-                         length=length, step=step, pymorphy=pymorphy
+                         length=length, step=step, pymorphy=pymorphy, one_hot_encoding=one_hot_encoding
                          )
 
     def summary(self):

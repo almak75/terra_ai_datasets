@@ -1,5 +1,8 @@
 import numpy as np
+from tensorflow.keras.preprocessing.text import Tokenizer
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
+
+from terra_ai_datasets.creation.validators.inputs import TextValidator, ImageValidator
 
 
 class TerraImageScaler:
@@ -62,40 +65,44 @@ class TerraImageScaler:
         return array.astype('uint8')
 
 
-def create_min_max_scaler(**kwargs):
+def create_min_max_scaler(parameters: ImageValidator):
 
     scaler = MinMaxScaler()
 
     return scaler
 
 
-def create_standard_scaler(**kwargs):
+def create_standard_scaler(parameters: ImageValidator):
 
     scaler = StandardScaler()
 
     return scaler
 
 
-def create_terra_image_scaler(**kwargs):
+def create_terra_image_scaler(parameters: ImageValidator):
 
-    scaler = TerraImageScaler(height=kwargs['height'], width=kwargs['width'])
+    scaler = TerraImageScaler(height=parameters.height, width=parameters.width)
 
     return scaler
 
 
-# @staticmethod
-# def create_tokenizer(text_list: list, options):
-#     tokenizer = Tokenizer(**{'num_words': options['max_words_count'],
-#                              'filters': options['filters'],
-#                              'lower': options['lower'],
-#                              'split': ' ',
-#                              'char_level': options['char_level'],
-#                              'oov_token': '<UNK>'
-#                              }
-#                           )
-#     tokenizer.fit_on_texts(text_list)
+def create_tokenizer(parameters: TextValidator):
+    tokenizer = Tokenizer(**{'num_words': parameters.max_words_count,
+                             'filters': parameters.filters,
+                             'lower': True,
+                             'split': ' ',
+                             'char_level': False,
+                             'oov_token': '<UNK>'}
+                          )
+    return tokenizer
 
-#     return tokenizer
+
+def create_bag_of_words(parameters: TextValidator):
+    return create_tokenizer(parameters)
+
+
+def create_embedding(parameters: TextValidator):
+    return create_tokenizer(parameters)
 
 
 # def create_word2vec(text_list: list, options):
@@ -110,39 +117,6 @@ def create_terra_image_scaler(**kwargs):
 #                         )
 #     return word2vec
 
-# def create_tokenizer(text_list: list, options):
-#     tokenizer = Tokenizer(**{'num_words': options['max_words_count'],
-#                              'filters': options['filters'],
-#                              'lower': options['lower'],
-#                              'split': ' ',
-#                              'char_level': options['char_level'],
-#                              'oov_token': '<UNK>'
-#                              }
-#                           )
-#     tokenizer.fit_on_texts(text_list)
-#
-#     # if not options['put'] in self.preprocessing.keys():
-#     #     self.preprocessing[options['put']] = {}
-#     # self.preprocessing[options['put']].update([(options['cols_names'], tokenizer)])
-#
-#     return tokenizer
-
-# def create_word2vec(text_list: list, options):
-#
-#     text_list = [elem.split(' ') for elem in text_list]
-#     word2vec = Word2Vec(text_list, **{'size': options['size'],
-#                                       'window': options['window'],
-#                                       'min_count': options['min_count'],
-#                                       'workers': options['workers'],
-#                                       'iter': options['iter']
-#                                       }
-#                         )
-#
-#     # if not options['put'] in self.preprocessing.keys():
-#     #     self.preprocessing[options['put']] = {}
-#     # self.preprocessing[options['put']].update([(options['cols_names'], word2vec)])
-#
-#     return word2vec
 
 # def inverse_data(self, options: dict):
 #     out_dict = {}

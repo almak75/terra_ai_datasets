@@ -150,7 +150,7 @@ class CreateDataset:
             if "preprocessing" in put_data.parameters.dict() and put_data.parameters.preprocessing.value != 'None':
                 preproc = \
                     getattr(preprocessings, f"create_{put_data.parameters.preprocessing.name}")(
-                        **put_data.parameters.dict()
+                        put_data.parameters
                     )
             return preproc
 
@@ -201,7 +201,10 @@ class CreateDataset:
                 sample_array = getattr(arrays, f"{put_data.type}Array")().create(dataframe.loc[row_idx, col_name],
                                                                                  put_data.parameters)
                 if preprocessing:
-                    preprocessing.fit(sample_array.reshape(-1, 1))
+                    if put_data.type == LayerInputTypeChoice.Text:
+                        preprocessing.fit_on_texts(sample_array.split())
+                    else:
+                        preprocessing.fit(sample_array.reshape(-1, 1))
                 row_array.append(sample_array)
 
         return np.array(row_array), preprocessing
