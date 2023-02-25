@@ -74,7 +74,7 @@ class ImageSegmentationValidator(SourceFolderPathValidator, TargetFolderPathVali
 
 
 # --- Text validators ---
-class TextClassificationValidator(SourceFolderPathValidator, inputs.TextValidator):
+class TextClassificationValidator(SourceFolderPathValidator, inputs.TextValidator, outputs.ClassificationValidator):
     pass
 
 

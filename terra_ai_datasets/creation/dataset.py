@@ -1,14 +1,15 @@
 import os
 import json
+from collections import ChainMap
 from datetime import datetime
 from pathlib import Path
 from typing import Union, List, Dict, Any, Tuple
-from tqdm import tqdm
 
+from tqdm import tqdm
 import numpy as np
 import pandas as pd
 
-from terra_ai_datasets.creation import arrays, preprocessings
+from terra_ai_datasets.creation import arrays, preprocessings, utils
 from terra_ai_datasets.creation.utils import DatasetPathsData, logger
 from terra_ai_datasets.creation.validators import creation_data
 from terra_ai_datasets.creation.validators.creation_data import InputData, OutputData, CSVData, InputInstructionsData, \
@@ -104,10 +105,9 @@ class CreateDataset:
             elif put.folder_path:
                 data_to_pass = []
                 for folder_path in put.folder_path:
-                    for direct, folder, files_name in os.walk(folder_path):
-                        if files_name:
-                            for file_name in sorted(files_name):
-                                data_to_pass.append(folder_path.joinpath(file_name))
+                    data_to_pass.extend(
+                        getattr(utils, f"extract_{put.type.value.lower()}_data")(folder_path, put.parameters)
+                    )
                 columns[f"{idx}_{put.type.value}"] = data_to_pass
 
             new_put_data[idx] = getattr(creation_data, f"{put_type}InstructionsData")(
@@ -144,25 +144,48 @@ class CreateDataset:
         return dataframe
 
     def create(self):
+
+        def create_preprocessing(put_data):
+            preproc = None
+            if "preprocessing" in put_data.parameters.dict() and put_data.parameters.preprocessing.value != 'None':
+                preproc = \
+                    getattr(preprocessings, f"create_{put_data.parameters.preprocessing.name}")(
+                        **put_data.parameters.dict()
+                    )
+            return preproc
+
+        def create_arrays_by_instructions(put_instructions, spl: str):
+            arr_data = {}
+            preproc_data = {}
+            for put_id, put_data in put_instructions.items():
+                preprocessing = create_preprocessing(put_data) if spl == "train" else self.preprocessing[put_id]
+                array, preprocessing = self.create_arrays(
+                    put_data, dataframe, put_id, spl, preprocessing if spl == "train" else None
+                )
+                arr_data[put_id] = array
+                if split == "train":
+                    preproc_data[put_id] = preprocessing
+                preprocessing = preprocessing if preprocessing else self.preprocessing.get(put_id)
+                if preprocessing:  # Временное решение до генераторов
+                    arr_data[put_id] = getattr(arrays, f"{put_data.type}Array")().preprocess(
+                            arr_data[put_id], preprocessing, put_data.parameters
+                        )
+
+            return arr_data, preproc_data
+
         if self._is_prepared:
             for split, dataframe in self.dataframe.items():
-                self.X[split], self.Y[split] = {}, {}
-                for inp_id, inp_data in self.input_instructions.items():
-                    self.preprocessing[inp_id] = \
-                        getattr(preprocessings, f"create_{inp_data.parameters.preprocessing.name}")(
-                            **inp_data.parameters.dict()
-                        )
-                    array = self.create_arrays(inp_data, dataframe, inp_id, split)
-                    # array = self.create_preprocessing(inp_data, array)
-                    ### Отправить на препроцессинг
-                    self.X[split][inp_id] = array
-                for out_id, out_data in self.output_instructions.items():
-                    array = self.create_arrays(out_data, dataframe, out_id, split)
-                    ### Отправить на препроцессинг
-                    self.Y[split][out_id] = array
 
-    def create_arrays(self,
-                      put_data: Union[InputInstructionsData, OutputInstructionsData],
+                arrays_data, preprocessing_data = create_arrays_by_instructions(self.input_instructions, split)
+                self.X[split] = arrays_data
+                self.preprocessing.update(preprocessing_data)
+
+                arrays_data, preprocessing_data = create_arrays_by_instructions(self.output_instructions, split)
+                self.Y[split] = arrays_data
+                self.preprocessing.update(preprocessing_data)
+
+    @staticmethod
+    def create_arrays(put_data: Union[InputInstructionsData, OutputInstructionsData],
                       dataframe: pd.DataFrame,
                       put_id: int,
                       split: str,
@@ -213,3 +236,29 @@ class CreateDataset:
             path_to_save = Path.cwd().joinpath(path_to_save)
 
         logger.info(f"Датасет сохранен в директорию {path_to_save}")
+
+
+class CreateClassificationDataset(CreateDataset):
+    y_classes = []
+
+    def create_put_instructions(self, put_data: List[Union[InputData, OutputData]], put_type: str, start_idx: int = 1) -> \
+            Dict[int, Union[InputInstructionsData, OutputInstructionsData]]:
+
+        new_put_data = {}
+        for idx, put in enumerate(put_data, start_idx):
+            columns = {}
+            if put_type == "Input":
+                data_to_pass = []
+                for folder_path in put.folder_path:
+                    data = getattr(utils, f"extract_{put.type.value.lower()}_data")(folder_path, put.parameters)
+                    self.y_classes.extend([folder_path.name for _ in data])
+                    data_to_pass.extend(data)
+            else:
+                data_to_pass = self.y_classes
+                put.parameters.classes_names = [path.name for path in put.folder_path]
+            columns[f"{idx}_{put.type.value}"] = data_to_pass
+
+            new_put_data[idx] = getattr(creation_data, f"{put_type}InstructionsData")(
+                type=put.type, parameters=put.parameters, columns=columns
+            )
+        return new_put_data

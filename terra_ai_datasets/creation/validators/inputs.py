@@ -1,4 +1,6 @@
 from enum import Enum
+from typing import Optional
+
 from pydantic import BaseModel, validator
 from pydantic.types import PositiveInt
 
@@ -30,7 +32,7 @@ class ImageValidator(BaseModel):
 
 
 # --- Text validators ---
-class TextFormatTypes(str, Enum):
+class TextModeTypes(str, Enum):
     full = "Full"
     length_and_step = "Length and step"
 
@@ -38,12 +40,24 @@ class TextFormatTypes(str, Enum):
 class TextProcessTypes(str, Enum):
     embedding = "Embedding"
     bag_of_words = "Bag of words"
-    word_to_vec = "Word2Vec"
+    # word_to_vec = "Word2Vec"
 
 
 class TextValidator(BaseModel):
     filters: str = '–—!"#$%&()*+,-./:;<=>?@[\\]^«»№_`{|}~\t\n\xa0–\ufeff'
     max_words_count: PositiveInt
-    text_format: TextFormatTypes
+    mode: TextModeTypes
     preprocessing: TextProcessTypes
-    pymorphy: bool
+    # pymorphy: bool
+    max_words: Optional[PositiveInt]
+    length: Optional[PositiveInt]
+    step: Optional[PositiveInt]
+
+    @validator("mode")
+    def _validate_mode(cls, value):
+        if value == TextModeTypes.full:
+            cls.__fields__["max_words"].required = True
+        elif value == TextModeTypes.length_and_step:
+            cls.__fields__["length"].required = True
+            cls.__fields__["step"].required = True
+        return value

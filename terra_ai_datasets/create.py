@@ -1,26 +1,32 @@
-from typing import Dict
+from typing import Dict, List, Union
 
-from terra_ai_datasets.creation.dataset import CreateDataset
-from terra_ai_datasets.creation.validators.inputs import ImageScalers
+from terra_ai_datasets.creation.dataset import CreateDataset, CreateClassificationDataset
+from terra_ai_datasets.creation.utils import extract_text_data
+from terra_ai_datasets.creation.validators import creation_data
+from terra_ai_datasets.creation.validators.creation_data import InputData, OutputData, OutputInstructionsData, \
+    InputInstructionsData
+from terra_ai_datasets.creation.validators.inputs import ImageScalers, TextModeTypes, TextProcessTypes
 from terra_ai_datasets.creation.validators.tasks import LayerInputTypeChoice, LayerOutputTypeChoice, \
     LayerSelectTypeChoice
 
 
-class ImageClassification(CreateDataset):
+class ImageClassification(CreateClassificationDataset):
     input_type = LayerInputTypeChoice.Image
     output_type = LayerOutputTypeChoice.Classification
 
     def __init__(
             self,
             source_path: list,
+            train_size: int,
             width: int,
             height: int,
-            preprocessing: str,
             network: str,
             process: str,
+            preprocessing: str = ImageScalers.none,
+            one_hot_encoding: bool = True
     ):
-        super().__init__(source_path=source_path, width=width, height=height, preprocessing=preprocessing,
-                         network=network, process=process)
+        super().__init__(source_path=source_path, train_size=train_size, width=width, height=height, network=network,
+                         process=process, preprocessing=preprocessing, one_hot_encoding=one_hot_encoding)
 
     def summary(self):
         super().summary()
@@ -62,9 +68,28 @@ class ImageSegmentation(CreateDataset):
         print("столько то классов и тд")
 
 
-class TextClassification(CreateDataset):
+class TextClassification(CreateClassificationDataset):
     input_type = LayerInputTypeChoice.Text
     output_type = LayerOutputTypeChoice.Classification
+    y_classes = []
+
+    def __init__(
+            self,
+            source_path: list,
+            train_size: int,
+            preprocessing: str = TextProcessTypes.embedding,
+            max_words_count: int = 20000,
+            mode: str = TextModeTypes.full,
+            filters: str = '–—!"#$%&()*+,-./:;<=>?@[\\]^«»№_`{|}~\t\n\xa0–\ufeff',
+            max_words: int = None,
+            length: int = None,
+            step: int = None,
+            pymorphy: bool = False
+    ):
+        super().__init__(source_path=source_path, train_size=train_size, preprocessing=preprocessing,
+                         max_words_count=max_words_count, mode=mode, filters=filters, max_words=max_words,
+                         length=length, step=step, pymorphy=pymorphy
+                         )
 
     def summary(self):
         super().summary()

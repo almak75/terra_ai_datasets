@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 
 from pydantic import BaseModel
 from pydantic.types import PositiveInt
@@ -15,7 +15,8 @@ class RegressionScalers(str, Enum):
 
 
 class ClassificationValidator(BaseModel):
-    one_hot_encoding: bool = True
+    one_hot_encoding: bool
+    classes_names: Optional[List[str]]
 
 
 class SegmentationValidator(BaseModel):

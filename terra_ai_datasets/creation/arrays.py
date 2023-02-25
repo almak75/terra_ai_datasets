@@ -6,7 +6,7 @@ from PIL import Image
 
 from terra_ai_datasets.creation.utils import resize_frame
 from terra_ai_datasets.creation.validators.inputs import ImageNetworkTypes, ImageValidator
-from terra_ai_datasets.creation.validators.outputs import SegmentationValidator
+from terra_ai_datasets.creation.validators.outputs import SegmentationValidator, ClassificationValidator
 
 
 class Array(ABC):
@@ -15,9 +15,9 @@ class Array(ABC):
     def create(self, source: Any, parameters: Any):
         pass
 
-    # @abstractmethod
-    # def preprocess(self, array: np.ndarray, preprocess, **options):
-    #     pass
+    @abstractmethod
+    def preprocess(self, array: np.ndarray, preprocess: Any, parameters: Any):
+        pass
 
 
 class ImageArray(Array):
@@ -34,7 +34,27 @@ class ImageArray(Array):
 
         return array
 
-    def preprocess(self, array: np.ndarray, **options):
+    def preprocess(self, array: np.ndarray, preprocess_obj: Any, parameters: ImageValidator):
+        orig_shape = array.shape
+        array = preprocess_obj.transform(array.reshape(-1, 1))
+        array = array.reshape(orig_shape)
+
+        return array
+
+
+class ClassificationArray(Array):
+
+    def create(self, source: str, parameters: ClassificationValidator):
+
+        array = parameters.classes_names.index(source)
+        if parameters.one_hot_encoding:
+            zeros = np.zeros(len(parameters.classes_names))
+            zeros[array] = 1
+            array = zeros
+
+        return array
+
+    def preprocess(self, array: np.ndarray, preprocess_obj, parameters: SegmentationValidator):
 
         return array
 
@@ -53,7 +73,7 @@ class SegmentationArray(Array):
 
         return array
 
-    def preprocess(self, array: np.ndarray, **options):
+    def preprocess(self, array: np.ndarray, preprocess_obj, parameters: SegmentationValidator):
 
         return array
 

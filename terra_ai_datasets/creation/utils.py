@@ -1,11 +1,15 @@
 from enum import Enum
 import logging
+from typing import Union
 
 import cv2
 import numpy as np
 from pathlib import Path
 
-from terra_ai_datasets.creation.validators.inputs import ImageProcessTypes
+from tensorflow.keras.preprocessing.text import text_to_word_sequence
+
+from terra_ai_datasets.creation.validators.inputs import ImageProcessTypes, TextValidator, TextModeTypes, ImageValidator
+from terra_ai_datasets.creation.validators.outputs import SegmentationValidator
 
 logger_formatter = logging.Formatter(f"%(asctime)s | %(message)s", "%H:%M:%S")
 stream_handler = logging.StreamHandler()
@@ -57,6 +61,36 @@ class DatasetPathsData:
     @property
     def config(self):
         return self.root_path.joinpath("config.json")
+
+
+def extract_image_data(folder_path: Path, parameters: Union[ImageValidator, SegmentationValidator]):
+    image_samples = []
+    for image_path in folder_path.iterdir():
+        image_samples.append(image_path)
+
+    return image_samples
+
+
+def extract_segmentation_data(folder_path: Path, parameters: SegmentationValidator):
+    return extract_image_data(folder_path, parameters)
+
+
+def extract_text_data(folder_path: Path, parameters: TextValidator):
+    text_samples = []
+    for file_name in folder_path.iterdir():
+        with open(file_name, 'r', encoding="utf-8") as text_file:
+            text = ' '.join(text_to_word_sequence(
+                text_file.read().strip(), **{'lower': False, 'filters': parameters.filters, 'split': ' '})
+            ).split()
+        if parameters.mode == TextModeTypes.full:
+            text_samples.append(' '.join(text[:parameters.max_words]))
+        else:
+            for i in range(0, len(text), parameters.step):
+                text_sample = text[i: i + parameters.length]
+                text_samples.append(' '.join(text_sample))
+                if len(text_sample) < parameters.length:
+                    break
+    return text_samples
 
 
 def resize_frame(image_array, target_shape, frame_mode):

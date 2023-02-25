@@ -6,3 +6,4 @@ numpy==1.21.6
 pillow==7.1.2
 tqdm==4.64.1
 scikit-learn>=1.0.2
+tensorflow>=2.0
