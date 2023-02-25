@@ -56,9 +56,9 @@ class TextArray(Array):
         for text in text_list:
             if parameters.preprocessing == TextProcessTypes.embedding:
                 text_array = preprocess_obj.texts_to_sequences([text])[0]
-                if TextModeTypes.full and len(text_array) < parameters.max_words:
+                if parameters.mode == TextModeTypes.full and len(text_array) < parameters.max_words:
                     text_array += [0 for _ in range(parameters.max_words - len(text_array))]
-                elif TextModeTypes.length_and_step and len(text_array) < parameters.length:
+                elif parameters.mode == TextModeTypes.length_and_step and len(text_array) < parameters.length:
                     text_array += [0 for _ in range(parameters.length - len(text_array))]
             elif parameters.preprocessing == TextProcessTypes.bag_of_words:
                 text_array = preprocess_obj.texts_to_matrix([text])[0]
