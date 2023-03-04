@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import List
 
 from pydantic import BaseModel, validator
-from pydantic.types import PositiveInt
 
 from terra_ai_datasets.creation.validators import inputs, outputs
 from terra_ai_datasets.creation.validators.tasks import LayerInputTypeChoice, LayerOutputTypeChoice
@@ -13,12 +12,12 @@ from terra_ai_datasets.creation.validators.tasks import LayerInputTypeChoice, La
 # --- Common validators ---
 class CommonValidator(BaseModel):
     use_generator: bool = False
-    train_size: PositiveInt
+    train_size: float
 
     @validator('train_size')
     def train_size_range(cls, v):
-        if not 0 < v <= 100:
-            raise ValueError('Ensure train_size is in range between 0 and 100')
+        if not 0.0 < v <= 1.0:
+            raise ValueError('Ensure train_size is in range between 0.0 and 1.0')
         return v
 
     class Config:

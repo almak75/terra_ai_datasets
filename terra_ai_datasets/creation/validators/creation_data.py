@@ -1,20 +1,18 @@
 from typing import Optional, List, Any, Dict
-from pathlib import Path
 
-from pydantic import BaseModel, validator, PositiveInt
+from pydantic import BaseModel, PositiveInt, DirectoryPath
 
-# from terra_ai_datasets.creation.validators import inputs, outputs
 from terra_ai_datasets.creation.validators.tasks import LayerInputTypeChoice, LayerOutputTypeChoice
 
 
 class CSVData(BaseModel):
-    csv_path: Path
+    csv_path: DirectoryPath
     columns: List[str]
 
 
 class PutData(BaseModel):
     csv_data: Optional[CSVData]
-    folder_path: Optional[List[Path]]
+    folder_path: Optional[List[DirectoryPath]]
     parameters: Any
 
 
@@ -32,10 +30,6 @@ class OutputData(PutData):
     # @validator("parameters")
     # def validate_output_parameters(cls, parameters, values):
     #     return getattr(outputs, f'{values["type"].value}Validator')(**parameters)
-
-
-# class InstructionsData(BaseModel):
-#     instructions: List
 
 
 class BaseInstructionsData(BaseModel):

@@ -31,6 +31,7 @@ class DatasetOutputsData(DatasetLayerData):
 class DatasetData(BaseModel):
     task: TasksChoice
     use_generator: bool
+    is_created: bool
     date: datetime = datetime.now().isoformat()
     inputs: Optional[Dict[PositiveInt, DatasetInputsData]] = {}
     outputs: Optional[Dict[PositiveInt, DatasetOutputsData]] = {}

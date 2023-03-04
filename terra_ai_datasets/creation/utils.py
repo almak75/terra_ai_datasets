@@ -31,6 +31,11 @@ class DatasetPutsData(Enum):
     outputs = "outputs"
 
 
+class DatasetInstructionFoldersData(Enum):
+    dataframe = "dataframe"
+    parameters = "parameters"
+
+
 class DatasetFoldersPutsData:
 
     def __init__(self, native_path: Path):
@@ -47,16 +52,29 @@ class DatasetFoldersPutsData:
         return self.native.joinpath(DatasetPutsData.outputs.value)
 
 
+class DatasetInstructionsFoldersData:
+
+    def __init__(self, native_path: Path):
+        for folder in DatasetInstructionFoldersData:
+            native_path.joinpath(folder.value).mkdir(parents=True, exist_ok=True)
+        self.native = native_path
+
+    @property
+    def dataframe(self):
+        return self.native.joinpath(DatasetInstructionFoldersData.dataframe.value)
+
+    @property
+    def parameters(self):
+        return self.native.joinpath(DatasetInstructionFoldersData.parameters.value)
+
+
 class DatasetPathsData:
 
     def __init__(self, root_path: Path):
-        for folder in DatasetFoldersData:
-            # root_path.joinpath(folder.value).mkdir(parents=True, exist_ok=True)
-            self.__dict__[folder.name] = DatasetFoldersPutsData(root_path.joinpath(folder.value))
         self.root_path = root_path
-        # self.arrays = DatasetFoldersPutsData(self.root_path.joinpath(DatasetFoldersData.arrays.value))
-        # self.instructions = DatasetFoldersPutsData(self.root_path.joinpath(DatasetFoldersData.instructions.value))
-        # self.preprocessing = DatasetFoldersPutsData(self.root_path.joinpath(DatasetFoldersData.preprocessing.value))
+        self.arrays = DatasetFoldersPutsData(root_path.joinpath(DatasetFoldersData.arrays.value))
+        self.instructions = DatasetInstructionsFoldersData(root_path.joinpath(DatasetFoldersData.instructions.value))
+        self.preprocessing = DatasetFoldersPutsData(root_path.joinpath(DatasetFoldersData.preprocessing.value))
 
     @property
     def config(self):

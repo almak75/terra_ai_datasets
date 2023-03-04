@@ -1,37 +1,185 @@
-import os
 import json
-from collections import ChainMap
-from datetime import datetime
 from pathlib import Path
-from typing import Union, List, Dict, Any, Tuple
+from datetime import datetime
+from typing import Union, List, Dict, Tuple, Any
 
+from tensorflow.python.data.ops.dataset_ops import DatasetV2 as Dataset
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
 
 from terra_ai_datasets.creation import arrays, preprocessings, utils
-from terra_ai_datasets.creation.utils import DatasetPathsData, logger
 from terra_ai_datasets.creation.validators import creation_data
 from terra_ai_datasets.creation.validators.creation_data import InputData, OutputData, CSVData, InputInstructionsData, \
     OutputInstructionsData
 from terra_ai_datasets.creation.validators import dataset
 from terra_ai_datasets.creation.validators import inputs, outputs
 from terra_ai_datasets.creation.validators.structure import DatasetData
+
 from terra_ai_datasets.creation.validators.tasks import LayerInputTypeChoice, LayerOutputTypeChoice, \
     LayerSelectTypeChoice
 
 
-class CreateDataset:
-    data = None
+class TerraDataset:
     input_type: LayerInputTypeChoice = None
     output_type: LayerOutputTypeChoice = None
-    dataframe: Dict[str, pd.DataFrame] = {}
-    preprocessing: Dict[int, Any] = {}
     X: Dict[str, Dict[int, np.ndarray]] = {}
     Y: Dict[str, Dict[int, np.ndarray]] = {}
+    preprocessing: Dict[int, Any] = {}
+    dataframe: Dict[str, pd.DataFrame] = {}
+    dataset_paths_data: utils.DatasetPathsData
+    dataset_data: DatasetData
+    input: List[InputData] = []
+    output: List[OutputData] = []
 
-    _is_validated = False
-    _is_prepared = False
+    _dataset: Dict[str, Dataset]
+    _is_prepared: bool = False
+    _is_created: bool = False
+
+    @property
+    def dataset(self):
+        if not self._dataset:
+            return 'Arrays has not been created yet. call .create(use_generator: bool)'
+        return self._dataset
+
+    @staticmethod
+    def create_dataset_object(x_arrays: Dict[int, np.ndarray] = None,
+                              y_arrays: Dict[int, np.ndarray] = None,
+                              x_instructions=None,
+                              y_instructions=None
+                              ) -> Dataset:
+        if x_arrays and y_arrays:
+            return Dataset.from_tensor_slices(x_arrays, y_arrays)
+
+        return Dataset.from_generator()
+
+    def generator(self, inputs, outputs, service=None):
+        pass
+
+    def create(self, use_generator: bool = False):
+
+        def create_preprocessing(put_data):
+            preproc = None
+            if "preprocessing" in put_data.parameters.dict() and put_data.parameters.preprocessing.value != 'None':
+                preproc = \
+                    getattr(preprocessings, f"create_{put_data.parameters.preprocessing.name}")(
+                        put_data.parameters
+                    )
+            return preproc
+
+        def create_arrays_by_instructions(put_instructions, spl: str):
+            arr_data = {}
+            preproc_data = {}
+            for put_id, put_data in put_instructions.items():
+                preprocessing = create_preprocessing(put_data) if spl == "train" else self.preprocessing[put_id]
+                array, preprocessing = self.create_arrays(
+                    put_data, dataframe, put_id, spl, preprocessing if spl == "train" else None
+                )
+                arr_data[put_id] = array
+                if split == "train":
+                    preproc_data[put_id] = preprocessing
+                preprocessing = preprocessing if preprocessing else self.preprocessing.get(put_id)
+                if preprocessing:  # Временное решение до генераторов
+                    arr_data[put_id] = getattr(arrays, f"{put_data.type}Array")().preprocess(
+                            arr_data[put_id], preprocessing, put_data.parameters
+                        )
+
+            self._is_created = True
+
+            return arr_data, preproc_data
+
+        if self._is_prepared:
+            for split, dataframe in self.dataframe.items():
+
+                arrays_data, preprocessing_data = create_arrays_by_instructions(self.input_instructions, split)
+                self.X[split] = arrays_data
+                self.preprocessing.update(preprocessing_data)
+
+                arrays_data, preprocessing_data = create_arrays_by_instructions(self.output_instructions, split)
+                self.Y[split] = arrays_data
+                self.preprocessing.update(preprocessing_data)
+
+    @staticmethod
+    def create_arrays(put_data: Union[InputInstructionsData, OutputInstructionsData],
+                      dataframe: pd.DataFrame,
+                      put_id: int,
+                      split: str,
+                      preprocessing: Any = None,
+                      ) -> Tuple[np.ndarray, Any]:
+        row_array = []
+        for row_idx in tqdm(
+                range(len(dataframe)),
+                desc=f"{datetime.now().strftime('%H:%M:%S')} | "
+                     f"Формирование массивов {split} - {put_id} - {put_data.type}"
+        ):
+            for col_name in put_data.columns.keys():
+                sample_array = getattr(arrays, f"{put_data.type}Array")().create(dataframe.loc[row_idx, col_name],
+                                                                                 put_data.parameters)
+                if preprocessing:
+                    if put_data.type == LayerInputTypeChoice.Text:
+                        preprocessing.fit_on_texts(sample_array.split())
+                    else:
+                        preprocessing.fit(sample_array.reshape(-1, 1))
+                row_array.append(sample_array)
+
+        return np.array(row_array), preprocessing
+
+    def summary(self):
+        if not self._is_prepared:
+            raise
+
+        print(self.dataframe['train'].head())
+        print(f"\n\033[1mКол-во примеров в train выборке:\033[0m {len(self.dataframe['train'])}\n"
+              f"\033[1mКол-во примеров в val выборке:\033[0m {len(self.dataframe['val'])}")
+        print()
+        if self._is_created:
+            for inp_id, array in enumerate(self.X["train"].values(), 1):
+                print(f"\033[1mРазмерность входного массива {inp_id}:\033[0m", array[0].shape)
+            for out_id, array in enumerate(self.Y["train"].values(), 1):
+                print(f"\033[1mРазмерность выходного массива {out_id}:\033[0m", array[0].shape)
+
+    def save(self, save_path: str) -> None:
+
+        def arrays_save(arrays_data: Dict[str, Dict[int, np.ndarray]], path_to_folder: Path):
+            for split, data in arrays_data.items():
+                for put_id, array in data.items():
+                    np.save(str(path_to_folder.joinpath(f"{put_id}_{split}")), array)
+
+        path_to_save = Path(save_path)
+        self.dataset_paths_data = utils.DatasetPathsData(path_to_save)
+
+        arrays_save(self.X, self.dataset_paths_data.arrays.inputs)
+        arrays_save(self.Y, self.dataset_paths_data.arrays.outputs)
+        for split, dataframe in self.dataframe.items():
+            dataframe.to_csv(self.dataset_paths_data.instructions.dataframe.joinpath(f"{split}.csv"))
+
+        for idx, inp in enumerate(self.input, 1):
+            with open(self.dataset_paths_data.instructions.parameters.joinpath(f"input_{idx}_{inp.type}.json"), "w")\
+                    as instruction:
+                json.dump(inp.json(), instruction)
+
+        for idx, out in enumerate(self.output, 1 + idx):
+            with open(self.dataset_paths_data.instructions.parameters.joinpath(f"output_{idx}_{out.type}.json"), "w")\
+                    as instruction:
+                json.dump(out.json(), instruction)
+
+        self.dataset_data = DatasetData(
+            task=self.input_type.value + self.output_type.value,
+            use_generator=self.data.use_generator,
+            is_created=self._is_created
+        )
+
+        with open(self.dataset_paths_data.config, "w") as config:
+            json.dump(self.dataset_data.json(), config)
+        if not path_to_save.is_absolute():
+            path_to_save = Path.cwd().joinpath(path_to_save)
+
+        utils.logger.info(f"Датасет сохранен в директорию {path_to_save}")
+
+
+class CreateDataset(TerraDataset):
+    data = None
+
     _is_created = False
 
     def __init__(self, **kwargs):
@@ -52,11 +200,10 @@ class CreateDataset:
             self.input_instructions, self.output_instructions, train_size=self.data.train_size
         )
         self._is_prepared = True
-        logger.info(f"Датасет подготовлен к началу формирования массивов")
+        utils.logger.info(f"Датасет подготовлен к началу формирования массивов")
 
     def _validate(self, instance, **kwargs):
         data = instance(**kwargs)
-        self._is_validated = True
         return data
 
     def preprocess_put_data(self, data, data_type: LayerSelectTypeChoice):
@@ -146,118 +293,11 @@ class CreateDataset:
             dataframe = dataframe.sample(frac=1)
 
         train_dataframe, val_dataframe = np.split(
-            dataframe, [int(train_size / 100 * len(dataframe))]
+            dataframe, [int(train_size * len(dataframe))]
         )
         dataframe = {"train": train_dataframe.reset_index(drop=True), "val": val_dataframe.reset_index(drop=True)}
 
         return dataframe
-
-    def create(self):
-
-        def create_preprocessing(put_data):
-            preproc = None
-            if "preprocessing" in put_data.parameters.dict() and put_data.parameters.preprocessing.value != 'None':
-                preproc = \
-                    getattr(preprocessings, f"create_{put_data.parameters.preprocessing.name}")(
-                        put_data.parameters
-                    )
-            return preproc
-
-        def create_arrays_by_instructions(put_instructions, spl: str):
-            arr_data = {}
-            preproc_data = {}
-            for put_id, put_data in put_instructions.items():
-                preprocessing = create_preprocessing(put_data) if spl == "train" else self.preprocessing[put_id]
-                array, preprocessing = self.create_arrays(
-                    put_data, dataframe, put_id, spl, preprocessing if spl == "train" else None
-                )
-                arr_data[put_id] = array
-                if split == "train":
-                    preproc_data[put_id] = preprocessing
-                preprocessing = preprocessing if preprocessing else self.preprocessing.get(put_id)
-                if preprocessing:  # Временное решение до генераторов
-                    arr_data[put_id] = getattr(arrays, f"{put_data.type}Array")().preprocess(
-                            arr_data[put_id], preprocessing, put_data.parameters
-                        )
-
-            self._is_created = True
-
-            return arr_data, preproc_data
-
-        if self._is_prepared:
-            for split, dataframe in self.dataframe.items():
-
-                arrays_data, preprocessing_data = create_arrays_by_instructions(self.input_instructions, split)
-                self.X[split] = arrays_data
-                self.preprocessing.update(preprocessing_data)
-
-                arrays_data, preprocessing_data = create_arrays_by_instructions(self.output_instructions, split)
-                self.Y[split] = arrays_data
-                self.preprocessing.update(preprocessing_data)
-
-    @staticmethod
-    def create_arrays(put_data: Union[InputInstructionsData, OutputInstructionsData],
-                      dataframe: pd.DataFrame,
-                      put_id: int,
-                      split: str,
-                      preprocessing: Any = None,
-                      ) -> Tuple[np.ndarray, Any]:
-        row_array = []
-        for row_idx in tqdm(
-                range(len(dataframe)),
-                desc=f"{datetime.now().strftime('%H:%M:%S')} | "
-                     f"Формирование массивов {split} - {put_id} - {put_data.type}"
-        ):
-            for col_name in put_data.columns.keys():
-                sample_array = getattr(arrays, f"{put_data.type}Array")().create(dataframe.loc[row_idx, col_name],
-                                                                                 put_data.parameters)
-                if preprocessing:
-                    if put_data.type == LayerInputTypeChoice.Text:
-                        preprocessing.fit_on_texts(sample_array.split())
-                    else:
-                        preprocessing.fit(sample_array.reshape(-1, 1))
-                row_array.append(sample_array)
-
-        return np.array(row_array), preprocessing
-
-    def summary(self):
-        if not self._is_validated:
-            raise
-        if self._is_prepared:
-            print(self.dataframe['train'].head())
-            print(f"\n\033[1mКол-во примеров в train выборке:\033[0m {len(self.dataframe['train'])}\n"
-                  f"\033[1mКол-во примеров в val выборке:\033[0m {len(self.dataframe['val'])}")
-            print()
-            if self._is_created:
-                for inp_id, array in enumerate(self.X["train"].values(), 1):
-                    print(f"\033[1mРазмерность входного массива {inp_id}:\033[0m", array[0].shape)
-                for out_id, array in enumerate(self.Y["train"].values(), 1):
-                    print(f"\033[1mРазмерность выходного массива {out_id}:\033[0m", array[0].shape)
-
-    def save(self, save_path: str) -> None:
-
-        def arrays_save(arrays_data: Dict[str, Dict[int, np.ndarray]], path_to_save: Path):
-            for split, data in arrays_data.items():
-                for put_id, array in data.items():
-                    np.save(str(path_to_save.joinpath(f"{put_id}_{split}")), array)
-
-        path_to_save = Path(save_path)
-        dataset_paths_data = DatasetPathsData(path_to_save)
-
-        arrays_save(self.X, dataset_paths_data.arrays.inputs)
-        arrays_save(self.Y, dataset_paths_data.arrays.outputs)
-
-        dataset_data = DatasetData(
-            task=self.input_type.value + self.output_type.value,
-            use_generator=self.data.use_generator
-        )
-
-        with open(dataset_paths_data.config, "w") as config:
-            json.dump(dataset_data.dict(), config)
-        if not path_to_save.is_absolute():
-            path_to_save = Path.cwd().joinpath(path_to_save)
-
-        logger.info(f"Датасет сохранен в директорию {path_to_save}")
 
 
 class CreateClassificationDataset(CreateDataset):

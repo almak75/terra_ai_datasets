@@ -17,7 +17,7 @@ class ImageClassification(CreateClassificationDataset):
     def __init__(
             self,
             source_path: list,
-            train_size: int,
+            train_size: float,
             width: int,
             height: int,
             network: str,
@@ -37,7 +37,7 @@ class ImageSegmentation(CreateDataset):
             self,
             source_path: list,
             target_path: list,
-            train_size: int,
+            train_size: float,
             width: int,
             height: int,
             network: str,
@@ -72,7 +72,7 @@ class TextClassification(CreateClassificationDataset):
     def __init__(
             self,
             source_path: list,
-            train_size: int,
+            train_size: float,
             preprocessing: str = TextProcessTypes.embedding,
             max_words_count: int = 20000,
             mode: str = TextModeTypes.full,
