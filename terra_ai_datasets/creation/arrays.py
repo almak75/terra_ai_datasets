@@ -38,7 +38,7 @@ class ImageArray(Array):
 
     def preprocess(self, array: np.ndarray, preprocess_obj: Any, parameters: ImageValidator) -> np.ndarray:
         orig_shape = array.shape
-        array = preprocess_obj.transform(array.reshape(-1, 1))
+        array = preprocess_obj.transform(array.reshape(-1, 1)).astype('float32')
         array = array.reshape(orig_shape)
 
         return array
@@ -73,7 +73,7 @@ class ClassificationArray(Array):
 
         array = parameters.classes_names.index(source)
         if parameters.one_hot_encoding:
-            zeros = np.zeros(len(parameters.classes_names))
+            zeros = np.zeros(len(parameters.classes_names), dtype=np.uint8)
             zeros[array] = 1
             array = zeros
 

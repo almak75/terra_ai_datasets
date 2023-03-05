@@ -55,7 +55,7 @@ class ImageSegmentation(CreateDataset):
         outputs_data[0].parameters.height = inputs_data[0].parameters.height
         outputs_data[0].parameters.width = inputs_data[0].parameters.width
         outputs_data[0].parameters.process = inputs_data[0].parameters.process
-        outputs_data[0].folder_path = self.data.target_path
+        outputs_data[0].folder_path = data.target_path
 
         return inputs_data, outputs_data
 
@@ -67,7 +67,6 @@ class ImageSegmentation(CreateDataset):
 class TextClassification(CreateClassificationDataset):
     input_type = LayerInputTypeChoice.Text
     output_type = LayerOutputTypeChoice.Classification
-    y_classes = []
 
     def __init__(
             self,

@@ -14,19 +14,6 @@ class TasksChoice(str, Enum):
     DataframeTimeseries = "DataframeTimeseries"
 
 
-class LayerEncodingChoice(str, Enum):
-    none = "none"
-    ohe = "ohe"
-    multi = "multi"
-
-
-class LayerDatatypeChoice(str, Enum):
-    dim = "DIM"
-    one_dim = "1D"
-    two_dim = "2D"
-    three_dim = "3D"
-
-
 class LayerInputTypeChoice(str, Enum):
     Image = "Image"
     Text = "Text"

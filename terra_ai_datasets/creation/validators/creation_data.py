@@ -1,4 +1,4 @@
-from typing import Optional, List, Any, Dict
+from typing import Optional, List, Any, Dict, Tuple
 
 from pydantic import BaseModel, PositiveInt, DirectoryPath
 
