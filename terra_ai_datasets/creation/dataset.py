@@ -4,10 +4,11 @@ from datetime import datetime
 from typing import Union, List, Dict, Tuple, Any
 
 from tensorflow.python.data.ops.dataset_ops import DatasetV2 as Dataset
+from tensorflow import TensorSpec
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
-from tensorflow import TensorSpec
+import joblib
 
 from terra_ai_datasets.creation import arrays, preprocessings, utils
 from terra_ai_datasets.creation.validators import creation_data
@@ -22,8 +23,6 @@ from terra_ai_datasets.creation.validators.tasks import LayerInputTypeChoice, La
 
 
 class TerraDataset:
-    input_type: LayerInputTypeChoice = None
-    output_type: LayerOutputTypeChoice = None
     X: Dict[str, Dict[int, np.ndarray]] = {"train": {}, "val": {}}
     Y: Dict[str, Dict[int, np.ndarray]] = {"train": {}, "val": {}}
     preprocessing: Dict[int, Any] = {}
@@ -33,13 +32,11 @@ class TerraDataset:
     output: List[OutputData] = []
 
     _dataset: Dict[str, Dataset] = {"train": None, "val": None}
-    _is_prepared: bool = False
-    _is_created: bool = False
 
     @property
     def dataset(self):
         if not self._dataset["train"] and not self._dataset["val"]:
-            return 'Arrays has not been created yet. call .create(use_generator: bool = False)'
+            return 'Массивы не были созданы. Вызовите метод .create(use_generator: bool = False)'
         return self._dataset
 
     @staticmethod
@@ -57,8 +54,9 @@ class TerraDataset:
             for col_name in columns:
                 sample_array = self.create_put_array(dataframe.loc[0, col_name], p_data)
                 if self.preprocessing[put_id]:
-                    sample_array = self.preprocess_put_array(np.array(sample_array), p_data,
-                                                             self.preprocessing[put_id])
+                    sample_array = self.preprocess_put_array(
+                        np.array(sample_array), p_data, self.preprocessing[put_id]
+                    )
                 row_array.append(sample_array)
 
             row_array = row_array if len(row_array) > 1 else row_array[0]
@@ -85,6 +83,7 @@ class TerraDataset:
                             np.array(sample_array), p_data, self.preprocessing[put_id]
                         )
                     row_array.append(sample_array)
+
                 row_array = row_array if len(row_array) > 1 else row_array[0]
                 if p_data.type in LayerInputTypeChoice:
                     inp_dict[put_id] = row_array
@@ -95,108 +94,63 @@ class TerraDataset:
 
     def create(self, use_generator: bool = False):
 
-        def create_preprocessing(p_data: Union[InputData, OutputData]):
+        def create_preprocessing(put_data: Union[InputData, OutputData]):
             preproc = None
-            if "preprocessing" in p_data.parameters.dict() and p_data.parameters.preprocessing.value != 'None':
+            if "preprocessing" in put_data.parameters.dict() and put_data.parameters.preprocessing.value != 'None':
                 preproc = \
-                    getattr(preprocessings, f"create_{p_data.parameters.preprocessing.name}")(
-                        p_data.parameters
+                    getattr(preprocessings, f"create_{put_data.parameters.preprocessing.name}")(
+                        put_data.parameters
                     )
             return preproc
 
-        # def create_arrays_by_instructions(put_instructions: Union[InputData, OutputData], spl: str):
-        #     arr_data = {}
-        #     preproc_data = {}
-        #     for put_id, p_data in put_instructions.items():
-        #         preprocessing = create_preprocessing(p_data) if spl == "train" else self.preprocessing[put_id]
-        #         array, preprocessing = self.create_arrays(
-        #             p_data, dataframe, put_id, spl, preprocessing if spl == "train" else None
-        #         )
-        #         arr_data[put_id] = array
-        #         if split == "train":
-        #             preproc_data[put_id] = preprocessing
-        #         preprocessing = preprocessing if preprocessing else self.preprocessing.get(put_id)
-        #         if preprocessing:  # Временное решение до генераторов
-        #             arr_data[put_id] = getattr(arrays, f"{p_data.type}Array")().preprocess(
-        #                     arr_data[put_id], preprocessing, p_data.parameters
-        #                 )
-        #
-        #     self._is_created = True
-        #
-        #     return arr_data, preproc_data
+        for put_id, p_data in enumerate(self.input + self.output, 1):
+            self.preprocessing.update({put_id: create_preprocessing(p_data)})
 
-        if self._is_prepared:
-
+        for split, dataframe in self.dataframe.items():  # train, val
             for put_id, p_data in enumerate(self.input + self.output, 1):
-                self.preprocessing.update({put_id: create_preprocessing(p_data)})
+                if split == "train":
+                    self.preprocessing.update({put_id: create_preprocessing(p_data)})
 
-            for split, dataframe in self.dataframe.items():  # train, val
-                for put_id, p_data in enumerate(self.input + self.output, 1):
-                    if split == "train":
-                        self.preprocessing.update({put_id: create_preprocessing(p_data)})
-
-                    columns = [col for col in dataframe.columns.tolist() if col.startswith(str(put_id))]
-                    put_array = []
-                    for row_idx in tqdm(range(len(dataframe)), desc=f"{datetime.now().strftime('%H:%M:%S')} | Формирование массивов {split} - {put_id} - {p_data.type}"):
-                        row_array = []
-                        for col_name in columns:
-                            sample_array = self.create_put_array(dataframe.loc[row_idx, col_name], p_data)
-                            if self.preprocessing[put_id] and split == "train":
-                                if p_data.type == LayerInputTypeChoice.Text:
-                                    self.preprocessing[put_id].fit_on_texts(sample_array.split())
-                                else:
-                                    self.preprocessing[put_id].fit(sample_array.reshape(-1, 1))
-                            if not use_generator:
-                                row_array.append(sample_array)
+                columns = [col for col in dataframe.columns.tolist() if col.startswith(str(put_id))]
+                put_array = []
+                for row_idx in tqdm(
+                        range(len(dataframe)),
+                        desc=f"{datetime.now().strftime('%H:%M:%S')} | "
+                             f"Формирование массивов {split} - {put_id} - {p_data.type}"
+                ):
+                    row_array = []
+                    for col_name in columns:
+                        sample_array = self.create_put_array(dataframe.loc[row_idx, col_name], p_data)
+                        if self.preprocessing[put_id] and split == "train":
+                            if p_data.type == LayerInputTypeChoice.Text:
+                                self.preprocessing[put_id].fit_on_texts(sample_array.split())
+                            else:
+                                self.preprocessing[put_id].fit(sample_array.reshape(-1, 1))
                         if not use_generator:
-                            put_array.append(row_array if len(row_array) > 1 else row_array[0])
-
+                            row_array.append(sample_array)
                     if not use_generator:
-                        if self.preprocessing[put_id]:
-                            put_array = self.preprocess_put_array(
-                                np.array(put_array), p_data, self.preprocessing[put_id]
-                            )
-                        if isinstance(p_data, InputData):
-                            self.X[split][put_id] = np.array(put_array)
-                        else:
-                            self.Y[split][put_id] = np.array(put_array)
-                if use_generator and split == "train":
-                    break
+                        put_array.append(row_array if len(row_array) > 1 else row_array[0])
 
-            for split, dataframe in self.dataframe.items():  # train, val
                 if not use_generator:
-                    self._dataset[split] = self.create_dataset_object_from_arrays(self.X[split], self.Y[split])
-                else:
-                    self._dataset[split] = self.create_dataset_object_from_instructions(
-                        self.input, self.output, dataframe
-                    )
-        else:
-            return 'Dataset was not prepared.'
+                    if self.preprocessing[put_id]:
+                        put_array = self.preprocess_put_array(
+                            np.array(put_array), p_data, self.preprocessing[put_id]
+                        )
+                    if isinstance(p_data, InputData):
+                        self.X[split][put_id] = np.array(put_array)
+                    else:
+                        self.Y[split][put_id] = np.array(put_array)
+            if use_generator and split == "train":
+                break
 
-    # @staticmethod
-    # def create_arrays(put_data: Union[InputData, OutputData],
-    #                   dataframe: pd.DataFrame,
-    #                   put_id: int,
-    #                   split: str,
-    #                   preprocessing: Any = None,
-    #                   ) -> Tuple[np.ndarray, Any]:
-    #     row_array = []
-    #     for row_idx in tqdm(
-    #             range(len(dataframe)),
-    #             desc=f"{datetime.now().strftime('%H:%M:%S')} | "
-    #                  f"Формирование массивов {split} - {put_id} - {put_data.type}"
-    #     ):
-    #         for col_name in put_data.columns.keys():
-    #             sample_array = getattr(arrays, f"{put_data.type}Array")().create(dataframe.loc[row_idx, col_name],
-    #                                                                              put_data.parameters)
-    #             if preprocessing:
-    #                 if put_data.type == LayerInputTypeChoice.Text:
-    #                     preprocessing.fit_on_texts(sample_array.split())
-    #                 else:
-    #                     preprocessing.fit(sample_array.reshape(-1, 1))
-    #             row_array.append(sample_array)
-    #
-    #     return np.array(row_array), preprocessing
+        for split, dataframe in self.dataframe.items():  # train, val
+            if not use_generator:
+                self._dataset[split] = self.create_dataset_object_from_arrays(self.X[split], self.Y[split])
+            else:
+                self._dataset[split] = self.create_dataset_object_from_instructions(
+                    self.input, self.output, dataframe
+                )
+        self.dataset_data.is_created = True
 
     @staticmethod
     def create_put_array(data: Any, put_data: Union[InputData, OutputData]):
@@ -215,14 +169,12 @@ class TerraDataset:
         return preprocessed_array
 
     def summary(self):
-        if not self._is_prepared:
-            raise
 
         print(self.dataframe['train'].head())
         print(f"\n\033[1mКол-во примеров в train выборке:\033[0m {len(self.dataframe['train'])}\n"
               f"\033[1mКол-во примеров в val выборке:\033[0m {len(self.dataframe['val'])}")
         print()
-        if self._is_created:
+        if self.dataset_data.is_created:
             for inp_id, array in enumerate(self.X["train"].values(), 1):
                 print(f"\033[1mРазмерность входного массива {inp_id}:\033[0m", array[0].shape)
             for out_id, array in enumerate(self.Y["train"].values(), 1):
@@ -231,27 +183,28 @@ class TerraDataset:
     def save(self, save_path: str) -> None:
 
         def arrays_save(arrays_data: Dict[str, Dict[int, np.ndarray]], path_to_folder: Path):
-            for split, data in arrays_data.items():
+            for spl, data in arrays_data.items():
                 for put_id, array in data.items():
-                    np.save(str(path_to_folder.joinpath(f"{put_id}_{split}")), array)
+                    joblib.dump(array, path_to_folder.joinpath(f"{put_id}_{spl}.gz"))
 
         path_to_save = Path(save_path)
         dataset_paths_data = utils.DatasetPathsData(path_to_save)
 
         arrays_save(self.X, dataset_paths_data.arrays.inputs)
         arrays_save(self.Y, dataset_paths_data.arrays.outputs)
+
+        for idx, proc in self.preprocessing.items():
+            if proc:
+                joblib.dump(proc, dataset_paths_data.preprocessing.joinpath(f"{idx}.gz"))
+
         for split, dataframe in self.dataframe.items():
             dataframe.to_csv(dataset_paths_data.instructions.dataframe.joinpath(f"{split}.csv"))
 
-        for idx, inp in enumerate(self.input, 1):
-            with open(dataset_paths_data.instructions.parameters.joinpath(f"input_{idx}_{inp.type}.json"), "w")\
+        for idx, put in enumerate(self.input + self.output, 1):
+            put_type = "input" if put.type in LayerInputTypeChoice else "output"
+            with open(dataset_paths_data.instructions.parameters.joinpath(f"{put_type}_{idx}_{put.type}.json"), "w")\
                     as instruction:
-                json.dump(inp.json(), instruction)
-
-        for idx, out in enumerate(self.output, 1 + idx):
-            with open(dataset_paths_data.instructions.parameters.joinpath(f"output_{idx}_{out.type}.json"), "w")\
-                    as instruction:
-                json.dump(out.json(), instruction)
+                json.dump(put.json(), instruction)
 
         with open(dataset_paths_data.config, "w") as config:
             json.dump(self.dataset_data.json(), config)
@@ -262,11 +215,11 @@ class TerraDataset:
 
 
 class CreateDataset(TerraDataset):
-
-    _is_created: bool = False
+    input_type: LayerInputTypeChoice = None
+    output_type: LayerOutputTypeChoice = None
 
     def __init__(self, **kwargs):
-        data = self._validate(  # убрать из self
+        data = self._validate(
             getattr(dataset, f"{self.input_type}{self.output_type}Validator"), **kwargs
         )
         self.input, self.output = self.preprocess_put_data(
@@ -286,9 +239,8 @@ class CreateDataset(TerraDataset):
         self.dataset_data = DatasetData(
             task=self.input_type.value + self.output_type.value,
             use_generator=data.use_generator,
-            is_created=self._is_created,
+            is_created=False,
         )
-        self._is_prepared = True
 
         utils.logger.info(f"Датасет подготовлен к началу формирования массивов")
 
@@ -387,8 +339,8 @@ class CreateDataset(TerraDataset):
 class CreateClassificationDataset(CreateDataset):
     y_classes = []
 
-    def create_put_instructions(self, put_data: List[Union[InputData, OutputData]], put_type: str, start_idx: int = 1) -> \
-            Dict[int, Union[InputInstructionsData, OutputInstructionsData]]:
+    def create_put_instructions(self, put_data: List[Union[InputData, OutputData]], put_type: str, start_idx: int = 1)\
+            -> Dict[int, Union[InputInstructionsData, OutputInstructionsData]]:
 
         new_put_data = {}
         for idx, put in enumerate(put_data, start_idx):

@@ -2,7 +2,7 @@ from pathlib import Path
 import json
 
 import pandas as pd
-import numpy as np
+import joblib
 
 from terra_ai_datasets.creation.dataset import TerraDataset
 from terra_ai_datasets.creation.utils import DatasetPathsData
@@ -30,6 +30,12 @@ class LoadDataset(TerraDataset):
             self.dataset_data = DatasetData(**json.loads(json.load(conf)))
 
         if self.dataset_data.is_created:
+            for put_id in range(1, len(self.input + self.output) + 1):
+                self.preprocessing[put_id] = None
+                prep_path = dataset_paths_data.preprocessing.joinpath(f"{put_id}.gz")
+                if prep_path.is_file():
+                    self.preprocessing[put_id] = joblib.load(prep_path)
+
             for split, dataframe in self.dataframe.items():
                 if self.dataset_data.use_generator:
                     self._dataset[split] = self.create_dataset_object_from_instructions(
@@ -38,8 +44,8 @@ class LoadDataset(TerraDataset):
                 else:
                     for array_path in dataset_paths_data.arrays.inputs.iterdir():
                         put_id, put = array_path.stem.split('_')
-                        self.X[put][put_id] = np.load(array_path)
+                        self.X[put][int(put_id)] = joblib.load(array_path)
                     for array_path in dataset_paths_data.arrays.outputs.iterdir():
                         put_id, put = array_path.stem.split('_')
-                        self.Y[put][put_id] = np.load(array_path)
+                        self.Y[put][int(put_id)] = joblib.load(array_path)
                     self._dataset[split] = self.create_dataset_object_from_arrays(self.X[split], self.Y[split])

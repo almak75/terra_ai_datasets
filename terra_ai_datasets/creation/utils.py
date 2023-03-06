@@ -74,7 +74,8 @@ class DatasetPathsData:
         self.root_path = root_path
         self.arrays = DatasetFoldersPutsData(root_path.joinpath(DatasetFoldersData.arrays.value))
         self.instructions = DatasetInstructionsFoldersData(root_path.joinpath(DatasetFoldersData.instructions.value))
-        self.preprocessing = DatasetFoldersPutsData(root_path.joinpath(DatasetFoldersData.preprocessing.value))
+        self.preprocessing = root_path.joinpath(DatasetFoldersData.preprocessing.value)
+        self.preprocessing.mkdir(exist_ok=True)
 
     @property
     def config(self):
