@@ -1,13 +1,16 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
+import librosa
 import numpy as np
 from PIL import Image
+from librosa import load as librosa_load
+import librosa.feature as librosa_feature
 from tensorflow.keras.preprocessing.text import Tokenizer
 
 from terra_ai_datasets.creation.utils import resize_frame
 from terra_ai_datasets.creation.validators.inputs import ImageNetworkTypes, ImageValidator, TextValidator, \
-    TextProcessTypes, TextModeTypes
+    TextProcessTypes, TextModeTypes, AudioValidator, AudioParameterTypes, AudioModeTypes
 from terra_ai_datasets.creation.validators.outputs import SegmentationValidator, ClassificationValidator
 
 
@@ -65,6 +68,53 @@ class TextArray(Array):
             array.append(text_array)
 
         return np.array(array)
+
+
+class AudioArray(Array):
+
+    def create(self, source: str, parameters: AudioValidator):
+        array = []
+        parameter = parameters.parameter[0]
+        audio_path, start_stop = source.split(';')
+        offset, stop = [float(x) for x in start_stop.split(':')]
+        duration = stop - offset
+
+        y, sr = librosa_load(
+            path=audio_path, sr=parameters.sample_rate, offset=offset, duration=duration,
+            res_type=parameters.resample.name
+        )
+
+        if round(parameters.sample_rate * duration, 0) > y.shape[0]:
+            zeros = np.zeros((int(round(parameters.sample_rate * duration, 0)) - y.shape[0],))
+            y = np.concatenate((y, zeros))
+        if parameter in [AudioParameterTypes.chroma_stft, AudioParameterTypes.mfcc,
+                         AudioParameterTypes.spectral_centroid, AudioParameterTypes.spectral_bandwidth,
+                         AudioParameterTypes.spectral_rolloff]:
+            array = getattr(librosa_feature, parameter.name)(y=y, sr=parameters.sample_rate)
+        elif parameter == AudioParameterTypes.rms:
+            array = getattr(librosa_feature, parameter.name)(y=y)[0]
+        elif parameter == AudioParameterTypes.zero_crossing_rate:
+            array = getattr(librosa_feature, parameter.name)(y=y)
+        elif parameter == AudioParameterTypes.audio_signal:
+            array = y
+
+        array = np.array(array)
+        if len(array.shape) == 2:
+            array = array.transpose()
+        if array.dtype == 'float64':
+            array = array.astype('float32')
+
+        return array
+
+    def preprocess(self, array: np.ndarray, preprocess: Any, parameters: Any):
+
+        orig_shape = array.shape
+        if len(orig_shape) > 1:
+            array = array.reshape(-1, 1)
+        array = preprocess.transform(array)
+        array = array.reshape(orig_shape)
+
+        return array
 
 
 class ClassificationArray(Array):

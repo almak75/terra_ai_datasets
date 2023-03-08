@@ -349,7 +349,8 @@ class CreateClassificationDataset(CreateDataset):
                 data_to_pass = []
                 for folder_path in put.folder_path:
                     data = getattr(utils, f"extract_{put.type.value.lower()}_data")(folder_path, put.parameters)
-                    self.y_classes.extend([folder_path.name for _ in data])
+                    if idx == 1:
+                        self.y_classes.extend([folder_path.name for _ in data])
                     data_to_pass.extend(data)
             else:
                 data_to_pass = self.y_classes

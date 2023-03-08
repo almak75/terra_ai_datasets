@@ -3,12 +3,14 @@ import logging
 from typing import Union
 
 import cv2
+import librosa
 import numpy as np
 from pathlib import Path
 
 from tensorflow.keras.preprocessing.text import text_to_word_sequence
 
-from terra_ai_datasets.creation.validators.inputs import ImageProcessTypes, TextValidator, TextModeTypes, ImageValidator
+from terra_ai_datasets.creation.validators.inputs import ImageProcessTypes, TextValidator, TextModeTypes, \
+    ImageValidator, AudioValidator
 from terra_ai_datasets.creation.validators.outputs import SegmentationValidator
 
 logger_formatter = logging.Formatter(f"%(asctime)s | %(message)s", "%H:%M:%S")
@@ -96,8 +98,8 @@ def extract_segmentation_data(folder_path: Path, parameters: SegmentationValidat
 
 def extract_text_data(folder_path: Path, parameters: TextValidator):
     text_samples = []
-    for file_name in folder_path.iterdir():
-        with open(file_name, 'r', encoding="utf-8") as text_file:
+    for text_path in folder_path.iterdir():
+        with open(text_path, 'r', encoding="utf-8") as text_file:
             text = ' '.join(text_to_word_sequence(
                 text_file.read().strip(), **{'lower': False, 'filters': parameters.filters, 'split': ' '})
             ).split()
@@ -110,6 +112,22 @@ def extract_text_data(folder_path: Path, parameters: TextValidator):
                 if len(text_sample) < parameters.length:
                     break
     return text_samples
+
+
+def extract_audio_data(folder_path: Path, parameters: AudioValidator):
+    audio_samples = []
+    for audio_path in folder_path.iterdir():
+        if parameters.mode == TextModeTypes.full:
+            audio_samples.append(';'.join([str(audio_path), f"0:{parameters.max_seconds}"]))
+        else:
+            duration = librosa.get_duration(filename=str(audio_path))
+            start_idx, stop_idx = 0, parameters.length
+            audio_samples.append(';'.join([str(audio_path), f"{start_idx}:{stop_idx}"]))
+            while stop_idx < duration:
+                start_idx += parameters.step
+                stop_idx += parameters.step
+                audio_samples.append(';'.join([str(audio_path), f"{start_idx}:{stop_idx}"]))
+    return audio_samples
 
 
 def resize_frame(image_array, target_shape, frame_mode):

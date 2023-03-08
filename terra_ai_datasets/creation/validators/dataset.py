@@ -77,6 +77,11 @@ class TextClassificationValidator(SourceFolderPathValidator, inputs.TextValidato
     pass
 
 
+# --- Audio validators ---
+class AudioClassificationValidator(SourceFolderPathValidator, inputs.AudioValidator, outputs.ClassificationValidator):
+    pass
+
+
 # --- Dataframe Validators ---
 class DataframePutData(BaseModel):
     columns: List[str]

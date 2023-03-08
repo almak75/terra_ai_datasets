@@ -1,10 +1,8 @@
-from typing import Dict, List, Union
+from typing import Dict
 
 from terra_ai_datasets.creation.dataset import CreateDataset, CreateClassificationDataset
-from terra_ai_datasets.creation.utils import extract_text_data
-from terra_ai_datasets.creation.validators import creation_data
-from terra_ai_datasets.creation.validators.creation_data import InputData, OutputData, OutputInstructionsData, \
-    InputInstructionsData
+from terra_ai_datasets.creation.validators.creation_data import InputData
+from terra_ai_datasets.creation.validators import inputs
 from terra_ai_datasets.creation.validators.inputs import ImageScalers, TextModeTypes, TextProcessTypes
 from terra_ai_datasets.creation.validators.tasks import LayerInputTypeChoice, LayerOutputTypeChoice, \
     LayerSelectTypeChoice
@@ -82,10 +80,60 @@ class TextClassification(CreateClassificationDataset):
             pymorphy: bool = False,
             one_hot_encoding: bool = True
     ):
-        super().__init__(source_path=source_path, train_size=train_size, preprocessing=preprocessing,
-                         max_words_count=max_words_count, mode=mode, filters=filters, max_words=max_words,
-                         length=length, step=step, pymorphy=pymorphy, one_hot_encoding=one_hot_encoding
-                         )
+        parameters = {"source_path": source_path, "train_size": train_size, "preprocessing": preprocessing,
+                      "max_words_count": max_words_count, "mode": mode, "filters": filters, "pymorphy": pymorphy,
+                      "one_hot_encoding": one_hot_encoding}
+
+        for name, param in {"max_words": max_words, "length": length, "step": step}.items():
+            if param:
+                parameters[name] = param
+
+        super().__init__(**parameters)
+
+
+class AudioClassification(CreateClassificationDataset):
+    input_type = LayerInputTypeChoice.Audio
+    output_type = LayerOutputTypeChoice.Classification
+
+    def __init__(
+            self,
+            source_path: list,
+            train_size: float,
+            mode: str,
+            parameter: list,
+            fill_mode: str,
+            resample: str,
+            max_seconds: float = None,
+            length: float = None,
+            step: float = None,
+            sample_rate: int = 22050,
+            preprocessing: str = 'None',
+            one_hot_encoding: bool = True
+    ):
+        parameters = {"source_path": source_path, "train_size": train_size, "preprocessing": preprocessing,
+                      "parameter": parameter, "mode": mode, "sample_rate": sample_rate, "fill_mode": fill_mode,
+                      "resample": resample, "one_hot_encoding": one_hot_encoding}
+
+        for name, param in {"max_seconds": max_seconds, "length": length, "step": step}.items():
+            if param:
+                parameters[name] = param
+
+        super().__init__(**parameters)
+
+    def preprocess_put_data(self, data, data_type: LayerSelectTypeChoice):
+        _, outputs_data = super().preprocess_put_data(data, data_type)
+
+        inputs_data = []
+        for parameter in data.parameter:
+            params = data.dict()
+            params['parameter'] = [parameter]
+            inputs_data.append(InputData(
+                folder_path=data.source_path,
+                type=self.input_type,
+                parameters=getattr(inputs, f"{self.input_type.value}Validator")(**params)
+            ))
+
+        return inputs_data, outputs_data
 
 
 class DataframeDataset(CreateDataset):
