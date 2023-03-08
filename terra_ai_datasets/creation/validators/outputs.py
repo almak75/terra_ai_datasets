@@ -11,7 +11,7 @@ from terra_ai_datasets.creation.validators.inputs import ImageProcessTypes
 class RegressionScalers(str, Enum):
     none = None
     min_max_scaler = "MinMaxScaler"
-    terra_image_scaler = "StandardScaler"
+    standard_scaler = "StandardScaler"
 
 
 class ClassificationValidator(BaseModel):
@@ -28,4 +28,4 @@ class SegmentationValidator(BaseModel):
 
 
 class RegressionValidator(BaseModel):
-    regression_scaler: RegressionScalers = RegressionScalers.none
+    preprocessing: RegressionScalers = RegressionScalers.none

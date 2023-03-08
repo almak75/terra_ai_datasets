@@ -122,3 +122,13 @@ class AudioValidator(BaseModel):
             cls.__fields__["length"].required = True
             cls.__fields__["step"].required = True
         return value
+
+
+# --- Dataframe validators ---
+class CategoricalValidator(BaseModel):
+    one_hot_encoding: bool
+    classes_names: Optional[List[str]]
+
+
+class RawValidator(BaseModel):
+    pass

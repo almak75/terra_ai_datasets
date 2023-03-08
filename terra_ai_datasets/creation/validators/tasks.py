@@ -10,6 +10,7 @@ class TasksChoice(str, Enum):
     TextRegression = "TextRegression"
     AudioClassification = "AudioClassification"
     DataframeClassification = "DataframeClassification"
+    DataframeDataset = "DataframeDataset"
     DataframeRegression = "DataframeRegression"
     DataframeTimeseries = "DataframeTimeseries"
 
@@ -19,14 +20,16 @@ class LayerInputTypeChoice(str, Enum):
     Text = "Text"
     Audio = "Audio"
     Dataframe = "Dataframe"
+    Categorical = "Categorical"
+    Raw = "Raw"
     # Scaler = "Scaler"
-    # Raw = "Raw"
 
 
 class LayerOutputTypeChoice(str, Enum):
     Classification = "Classification"
     Segmentation = "Segmentation"
     Regression = "Regression"
+    Dataset = "Dataset"
     Timeseries = "Timeseries"
     TimeseriesTrend = "TimeseriesTrend"
 

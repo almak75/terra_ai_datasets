@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 from datetime import datetime
-from typing import Union, List, Dict, Tuple, Any
+from typing import Union, Dict, Tuple, Any
 
 from tensorflow.python.data.ops.dataset_ops import DatasetV2 as Dataset
 from tensorflow import TensorSpec
@@ -12,10 +12,11 @@ import joblib
 
 from terra_ai_datasets.creation import arrays, preprocessings, utils
 from terra_ai_datasets.creation.validators import creation_data
-from terra_ai_datasets.creation.validators.creation_data import InputData, OutputData, CSVData, InputInstructionsData, \
+from terra_ai_datasets.creation.validators.creation_data import InputData, OutputData, InputInstructionsData, \
     OutputInstructionsData
 from terra_ai_datasets.creation.validators import dataset
 from terra_ai_datasets.creation.validators import inputs, outputs
+from terra_ai_datasets.creation.validators.inputs import CategoricalValidator
 from terra_ai_datasets.creation.validators.structure import DatasetData
 
 from terra_ai_datasets.creation.validators.tasks import LayerInputTypeChoice, LayerOutputTypeChoice, \
@@ -25,11 +26,10 @@ from terra_ai_datasets.creation.validators.tasks import LayerInputTypeChoice, La
 class TerraDataset:
     X: Dict[str, Dict[int, np.ndarray]] = {"train": {}, "val": {}}
     Y: Dict[str, Dict[int, np.ndarray]] = {"train": {}, "val": {}}
-    preprocessing: Dict[int, Any] = {}
+    preprocessing: Dict[str, Any] = {}
     dataframe: Dict[str, pd.DataFrame] = {}
     dataset_data: DatasetData
-    input: List[InputData] = []
-    output: List[OutputData] = []
+    put_instructions: Dict[int, Dict[str, Union[InputInstructionsData, OutputInstructionsData]]] = {}
 
     _dataset: Dict[str, Dataset] = {"train": None, "val": None}
 
@@ -43,124 +43,129 @@ class TerraDataset:
     def create_dataset_object_from_arrays(x_arrays: Dict[int, np.ndarray], y_arrays: Dict[int, np.ndarray]) -> Dataset:
         return Dataset.from_tensor_slices((x_arrays, y_arrays))
 
-    def create_dataset_object_from_instructions(self, inp_instr, out_instr, dataframe) -> Dataset:
+    def create_dataset_object_from_instructions(self, put_instr, dataframe) -> Dataset:
 
         output_signature = [{}, {}]
-        for put_id, p_data in enumerate(inp_instr + out_instr, 1):
-
-            columns = [col for col in dataframe.columns.tolist() if col.startswith(str(put_id))]
-
-            row_array = []
-            for col_name in columns:
-                sample_array = self.create_put_array(dataframe.loc[0, col_name], p_data)
-                if self.preprocessing[put_id]:
-                    sample_array = self.preprocess_put_array(
-                        np.array(sample_array), p_data, self.preprocessing[put_id]
+        for put_id, cols_dict in put_instr.items():
+            put_array = []
+            for col_name, put_data in cols_dict.items():
+                col_array = []
+                sample_array = self.create_put_array(dataframe.loc[0, col_name], put_data)
+                col_array.append(sample_array)
+                if self.preprocessing[col_name]:
+                    col_array = self.preprocess_put_array(
+                        np.array(sample_array), put_data, self.preprocessing[col_name]
                     )
-                row_array.append(sample_array)
+                put_array.append(col_array if len(col_array) > 1 else col_array[0])
 
-            row_array = row_array if len(row_array) > 1 else row_array[0]
-            if p_data.type in LayerInputTypeChoice:
-                output_signature[0][put_id] = TensorSpec(shape=row_array.shape, dtype=row_array.dtype)
+            if len(put_array) > 1:
+                put_array = np.concatenate(put_array, axis=1)
             else:
-                output_signature[1][put_id] = TensorSpec(shape=row_array.shape, dtype=row_array.dtype)
+                put_array = np.concatenate(put_array, axis=0)
 
-        return Dataset.from_generator(lambda: self.generator(inp_instr, out_instr, dataframe),
+            if put_data.type in LayerInputTypeChoice:
+                output_signature[0][put_id] = TensorSpec(shape=put_array.shape, dtype=put_array.dtype)
+            else:
+                output_signature[1][put_id] = TensorSpec(shape=put_array.shape, dtype=put_array.dtype)
+
+        return Dataset.from_generator(lambda: self.generator(put_instr, dataframe),
                                       output_signature=tuple(output_signature))
 
-    def generator(self, inp_instr, out_instr, dataframe: pd.DataFrame):
+    def generator(self, put_instr, dataframe: pd.DataFrame):
 
         for i in range(len(dataframe)):
             inp_dict, out_dict = {}, {}
-            for put_id, p_data in enumerate(inp_instr + out_instr, 1):
-                columns = [col for col in dataframe.columns.tolist() if col.startswith(str(put_id))]
-
-                row_array = []
-                for col_name in columns:
-                    sample_array = self.create_put_array(dataframe.loc[0, col_name], p_data)
-                    if self.preprocessing[put_id]:
+            for put_id, cols_dict in put_instr.items():
+                put_array = []
+                for col_name, put_data in cols_dict.items():
+                    sample_array = self.create_put_array(dataframe.loc[i, col_name], put_data)
+                    if self.preprocessing.get(col_name):
                         sample_array = self.preprocess_put_array(
-                            np.array(sample_array), p_data, self.preprocessing[put_id]
+                            sample_array, put_data, self.preprocessing[col_name]
                         )
-                    row_array.append(sample_array)
+                    put_array.append(sample_array if len(sample_array) > 1 else sample_array[0])
 
-                row_array = row_array if len(row_array) > 1 else row_array[0]
-                if p_data.type in LayerInputTypeChoice:
-                    inp_dict[put_id] = row_array
+                if len(put_array) > 1:
+                    put_array = np.concatenate(put_array, axis=1)
                 else:
-                    out_dict[put_id] = row_array
+                    put_array = np.concatenate(put_array, axis=0)
+
+                if put_data.type in LayerInputTypeChoice:
+                    inp_dict[put_id] = put_array
+                else:
+                    out_dict[put_id] = put_array
 
             yield inp_dict, out_dict
 
     def create(self, use_generator: bool = False):
 
-        def create_preprocessing(put_data: Union[InputData, OutputData]):
-            preproc = None
-            if "preprocessing" in put_data.parameters.dict() and put_data.parameters.preprocessing.value != 'None':
-                preproc = \
-                    getattr(preprocessings, f"create_{put_data.parameters.preprocessing.name}")(
-                        put_data.parameters
-                    )
-            return preproc
+        for split, dataframe in self.dataframe.items():
+            for put_id, cols_dict in self.put_instructions.items():
+                if use_generator and split != "train":
+                    continue
+                for col_name, put_data in cols_dict.items():
+                    if split == "train":
+                        if "preprocessing" in put_data.parameters.dict() and put_data.parameters.preprocessing.value != 'None':
+                            self.preprocessing[col_name] = \
+                                getattr(preprocessings, f"create_{put_data.parameters.preprocessing.name}")(
+                                    put_data.parameters
+                                )
 
-        for put_id, p_data in enumerate(self.input + self.output, 1):
-            self.preprocessing.update({put_id: create_preprocessing(p_data)})
-
-        for split, dataframe in self.dataframe.items():  # train, val
-            for put_id, p_data in enumerate(self.input + self.output, 1):
-                if split == "train":
-                    self.preprocessing.update({put_id: create_preprocessing(p_data)})
-
-                columns = [col for col in dataframe.columns.tolist() if col.startswith(str(put_id))]
                 put_array = []
-                for row_idx in tqdm(
-                        range(len(dataframe)),
-                        desc=f"{datetime.now().strftime('%H:%M:%S')} | "
-                             f"Формирование массивов {split} - {put_id} - {p_data.type}"
-                ):
-                    row_array = []
-                    for col_name in columns:
-                        sample_array = self.create_put_array(dataframe.loc[row_idx, col_name], p_data)
-                        if self.preprocessing[put_id] and split == "train":
-                            if p_data.type == LayerInputTypeChoice.Text:
-                                self.preprocessing[put_id].fit_on_texts(sample_array.split())
+                for col_name, put_data in cols_dict.items():
+                    col_array = []
+                    for row_idx in tqdm(
+                            range(len(dataframe)),
+                            desc=f"{datetime.now().strftime('%H:%M:%S')} | Формирование массивов {split} - {put_data.type} - {col_name}"
+                    ):
+                        sample_array = self.create_put_array(dataframe.loc[row_idx, col_name], put_data)
+                        if self.preprocessing.get(col_name) and split == "train":
+                            if put_data.type == LayerInputTypeChoice.Text:
+                                self.preprocessing[col_name].fit_on_texts(sample_array.split())
                             else:
-                                self.preprocessing[put_id].fit(sample_array.reshape(-1, 1))
+                                self.preprocessing[col_name].fit(sample_array.reshape(-1, 1))
                         if not use_generator:
-                            row_array.append(sample_array)
+                            col_array.append(sample_array)
+
+                    if self.preprocessing.get(col_name) and not use_generator:
+                        col_array = self.preprocess_put_array(
+                            np.array(col_array), put_data, self.preprocessing[col_name]
+                        )
                     if not use_generator:
-                        put_array.append(row_array if len(row_array) > 1 else row_array[0])
+                        put_array.append(col_array if len(col_array) > 1 else col_array[0])
 
                 if not use_generator:
-                    if self.preprocessing[put_id]:
-                        put_array = self.preprocess_put_array(
-                            np.array(put_array), p_data, self.preprocessing[put_id]
-                        )
-                    if isinstance(p_data, InputData):
-                        self.X[split][put_id] = np.array(put_array)
+                    if len(put_array) > 1:
+                        put_array = np.concatenate(put_array, axis=1)
                     else:
-                        self.Y[split][put_id] = np.array(put_array)
-            if use_generator and split == "train":
-                break
+                        put_array = np.concatenate(put_array, axis=0)
 
-        for split, dataframe in self.dataframe.items():  # train, val
+                    if isinstance(put_data, InputInstructionsData):
+                        self.X[split][put_id] = put_array
+                    else:
+                        self.Y[split][put_id] = put_array
+            # if use_generator and split == "train":
+            #     continue
+
             if not use_generator:
                 self._dataset[split] = self.create_dataset_object_from_arrays(self.X[split], self.Y[split])
             else:
                 self._dataset[split] = self.create_dataset_object_from_instructions(
-                    self.input, self.output, dataframe
+                    self.put_instructions, dataframe
                 )
         self.dataset_data.is_created = True
 
     @staticmethod
-    def create_put_array(data: Any, put_data: Union[InputData, OutputData]):
+    def create_put_array(data: Any, put_data: Union[InputInstructionsData, OutputInstructionsData]):
 
         sample_array = getattr(arrays, f"{put_data.type}Array")().create(data, put_data.parameters)
 
         return sample_array
 
     @staticmethod
-    def preprocess_put_array(data: Any, put_data: Union[InputData, OutputData], preprocessing: Any):
+    def preprocess_put_array(
+            data: Any, put_data: Union[InputInstructionsData, OutputInstructionsData], preprocessing: Any
+    ):
 
         preprocessed_array = getattr(arrays, f"{put_data.type}Array")().preprocess(
             data, preprocessing, put_data.parameters
@@ -184,8 +189,8 @@ class TerraDataset:
 
         def arrays_save(arrays_data: Dict[str, Dict[int, np.ndarray]], path_to_folder: Path):
             for spl, data in arrays_data.items():
-                for put_id, array in data.items():
-                    joblib.dump(array, path_to_folder.joinpath(f"{put_id}_{spl}.gz"))
+                for p_id, array in data.items():
+                    joblib.dump(array, path_to_folder.joinpath(f"{p_id}_{spl}.gz"))
 
         path_to_save = Path(save_path)
         dataset_paths_data = utils.DatasetPathsData(path_to_save)
@@ -193,18 +198,21 @@ class TerraDataset:
         arrays_save(self.X, dataset_paths_data.arrays.inputs)
         arrays_save(self.Y, dataset_paths_data.arrays.outputs)
 
-        for idx, proc in self.preprocessing.items():
-            if proc:
-                joblib.dump(proc, dataset_paths_data.preprocessing.joinpath(f"{idx}.gz"))
+        if self.preprocessing:
+            for col_name, proc in self.preprocessing.items():
+                if proc:
+                    joblib.dump(proc, dataset_paths_data.preprocessing.joinpath(f"{col_name}.gz"))
 
         for split, dataframe in self.dataframe.items():
             dataframe.to_csv(dataset_paths_data.instructions.dataframe.joinpath(f"{split}.csv"))
 
-        for idx, put in enumerate(self.input + self.output, 1):
-            put_type = "input" if put.type in LayerInputTypeChoice else "output"
-            with open(dataset_paths_data.instructions.parameters.joinpath(f"{put_type}_{idx}_{put.type}.json"), "w")\
-                    as instruction:
-                json.dump(put.json(), instruction)
+        for put_id, cols_dict in self.put_instructions.items():
+            for col_name, put_data in cols_dict.items():
+                put_type = "input" if put_data.type in LayerInputTypeChoice else "output"
+                file_name = f"{put_type}_{put_id}_{put_data.type}"
+                with open(dataset_paths_data.instructions.parameters.joinpath(f"{file_name}.json"), "w") as instruction:
+                    put_data.data = None
+                    json.dump(put_data.json(), instruction)
 
         with open(dataset_paths_data.config, "w") as config:
             json.dump(self.dataset_data.json(), config)
@@ -219,26 +227,19 @@ class CreateDataset(TerraDataset):
     output_type: LayerOutputTypeChoice = None
 
     def __init__(self, **kwargs):
-        data = self._validate(
+        self.data = self._validate(
             getattr(dataset, f"{self.input_type}{self.output_type}Validator"), **kwargs
         )
-        self.input, self.output = self.preprocess_put_data(
-            data=data, data_type=LayerSelectTypeChoice.table
+        self.put_data = self.preprocess_put_data(
+            data=self.data, data_type=LayerSelectTypeChoice.table
             if self.input_type == LayerInputTypeChoice.Dataframe else LayerSelectTypeChoice.folder
         )
-        input_instructions = self.create_put_instructions(
-            put_data=self.input, put_type='Input'
-        )
-        output_instructions = self.create_put_instructions(
-            put_data=self.output, put_type='Output', start_idx=len(input_instructions) + 1
-        )
-        self.dataframe = self.create_table(
-            input_instructions, output_instructions, train_size=data.train_size
-        )
+        self.put_instructions, self.preprocessing = self.create_put_instructions(put_data=self.put_data)
+        self.dataframe = self.create_table(self.put_instructions, train_size=self.data.train_size)
 
         self.dataset_data = DatasetData(
             task=self.input_type.value + self.output_type.value,
-            use_generator=data.use_generator,
+            use_generator=self.data.use_generator,
             is_created=False,
         )
 
@@ -249,80 +250,92 @@ class CreateDataset(TerraDataset):
         data = instance(**kwargs)
         return data
 
-    def preprocess_put_data(self, data, data_type: LayerSelectTypeChoice) -> Tuple[List[InputData], List[OutputData]]:
-        inputs_data = []
-        outputs_data = []
+    def preprocess_put_data(self, data, data_type: LayerSelectTypeChoice) -> \
+            Dict[int, Union[Dict[Any, Any], Dict[str, InputData], Dict[str, OutputData]]]:
+
+        puts_data = {}
+
         if data_type == LayerSelectTypeChoice.table:
-            for inp in data.inputs:
-                inputs_data.append(InputData(
-                    csv_data=CSVData(csv_path=data.csv_path, columns=inp.columns),
-                    type=inp.type,
-                    parameters=inp.parameters
-                ))
-            for out in data.outputs:
-                outputs_data.append(OutputData(
-                    csv_data=CSVData(csv_path=data.csv_path, columns=out.columns),
-                    type=out.type,
-                    parameters=out.parameters
-                ))
+            for idx, put in enumerate(data.inputs + data.outputs, 1):
+                puts_data[idx] = {}
+                for col_name in put.columns:
+                    parameters_to_pass = {"csv_path": data.csv_path,
+                                          "column": col_name,
+                                          "type": put.type,
+                                          "parameters": put.parameters}
+                    put_data = InputData(**parameters_to_pass) if put.type in LayerInputTypeChoice else OutputData(
+                        **parameters_to_pass)
+                    puts_data[idx][f"{idx}_{col_name}"] = put_data
+
         elif data_type == LayerSelectTypeChoice.folder:
-            inputs_data.append(InputData(
+            puts_data[1] = {f"1_{self.input_type.value}": InputData(
                 folder_path=data.source_path,
+                column=f"1_{self.input_type.value}",
                 type=self.input_type,
                 parameters=getattr(inputs, f"{self.input_type.value}Validator")(**data.dict())
-            ))
-            outputs_data.append(OutputData(
+            )}
+            puts_data[2] = {f"2_{self.output_type.value}": OutputData(
                 folder_path=data.source_path,
+                column=f"2_{self.output_type.value}",
                 type=self.output_type,
                 parameters=getattr(outputs, f"{self.output_type.value}Validator")(**data.dict())
-            ))
+            )}
 
-        return inputs_data, outputs_data
+        return puts_data
 
     @staticmethod
-    def create_put_instructions(put_data: List[Union[InputData, OutputData]], put_type: str, start_idx: int = 1) -> \
-            Dict[int, Union[InputInstructionsData, OutputInstructionsData]]:
+    def create_put_instructions(put_data) -> \
+            Tuple[Dict[int, Dict[str, Union[InputInstructionsData, OutputInstructionsData]]],
+                  Dict[int, Dict[str, Any]]]:
 
         new_put_data = {}
-        for idx, put in enumerate(put_data, start_idx):
-            columns = {}
-            if put.csv_data:
-                csv_table = pd.read_csv(put.csv_data.csv_path, usecols=put.csv_data.columns)
-                for column in put.csv_data.columns:
-                    data_to_pass = csv_table.loc[:, column].tolist()
-                    if put.type in [LayerInputTypeChoice.Image, LayerOutputTypeChoice.Segmentation]:
-                        data_to_pass = [put.csv_data.csv_path.parent.joinpath(elem) for elem in data_to_pass]
-                    columns[f"{idx}_{column}"] = data_to_pass
-
-            elif put.folder_path:
+        preprocessing_data = {}
+        for put_id, cols_dict in put_data.items():
+            new_put_data[put_id] = {}
+            for col_name, put_data in cols_dict.items():
                 data_to_pass = []
-                for folder_path in put.folder_path:
-                    data_to_pass.extend(
-                        getattr(utils, f"extract_{put.type.value.lower()}_data")(folder_path, put.parameters)
-                    )
-                columns[f"{idx}_{put.type.value}"] = data_to_pass
+                preprocessing_data[col_name] = {}
+                if put_data.csv_path:
+                    csv_table = pd.read_csv(put_data.csv_path, usecols=[put_data.column])
+                    data_to_pass = csv_table.loc[:, put_data.column].tolist()
+                    if put_data.type in [LayerInputTypeChoice.Image, LayerOutputTypeChoice.Segmentation]:
+                        data_to_pass = [str(put_data.csv_path.parent.joinpath(elem)) for elem in data_to_pass]
+                    elif put_data.type == LayerInputTypeChoice.Categorical:
+                        put_data.parameters.classes_names = list(set(data_to_pass))
+                else:
+                    for folder_path in put_data.folder_path:
+                        data_to_pass.extend(
+                            getattr(utils, f"extract_{put_data.type.value.lower()}_data")(folder_path,
+                                                                                          put_data.parameters)
+                        )
 
-            new_put_data[idx] = getattr(creation_data, f"{put_type}InstructionsData")(
-                type=put.type, parameters=put.parameters, columns=columns
-            )
-        return new_put_data
+                if "preprocessing" in put_data.parameters.dict() and put_data.parameters.preprocessing.value != 'None':
+                    preprocessing_data[col_name] = \
+                        getattr(preprocessings, f"create_{put_data.parameters.preprocessing.name}")(
+                            put_data.parameters
+                        )
+
+                put_type = "Input" if put_data.type in LayerInputTypeChoice else "Output"
+                parameters = put_data.parameters
+                if put_data.type == LayerInputTypeChoice.Categorical:
+                    parameters = CategoricalValidator(**put_data.parameters.dict())
+                new_put_data[put_id][col_name] = getattr(creation_data, f"{put_type}InstructionsData")(
+                    type=put_data.type, parameters=parameters, data=data_to_pass
+                )
+
+        return new_put_data, preprocessing_data
 
     @staticmethod
-    def create_table(input_instructions: Dict[int, InputInstructionsData],
-                     output_instructions: Dict[int, OutputInstructionsData],
+    def create_table(put_instructions: Dict[int, Dict[str, Union[InputInstructionsData, OutputInstructionsData]]],
                      train_size: int,
                      shuffle: bool = True,
                      ) -> Dict[str, pd.DataFrame]:
 
-        def create_put_table(put_instructions):
-            dict_data = {}
-            for put_id, put_data in put_instructions.items():
-                dict_data.update(put_data.columns)
-            return dict_data
-
         csv_data = {}
-        csv_data.update(create_put_table(input_instructions))
-        csv_data.update(create_put_table(output_instructions))
+        for put_id, cols_dict in put_instructions.items():
+            for col_name, put_data in cols_dict.items():
+                csv_data[col_name] = put_data.data
+
         dataframe = pd.DataFrame.from_dict(csv_data)
 
         if shuffle:
@@ -339,29 +352,46 @@ class CreateDataset(TerraDataset):
 class CreateClassificationDataset(CreateDataset):
     y_classes = []
 
-    def create_put_instructions(self, put_data: List[Union[InputData, OutputData]], put_type: str, start_idx: int = 1)\
-            -> Dict[int, Union[InputInstructionsData, OutputInstructionsData]]:
+    def create_put_instructions(self, put_data) -> \
+            Tuple[Dict[int, Dict[str, Union[InputInstructionsData, OutputInstructionsData]]],
+                  Dict[int, Dict[str, Any]]]:
 
         new_put_data = {}
-        for idx, put in enumerate(put_data, start_idx):
-            columns = {}
-            if put_type == "Input":
-                data_to_pass = []
-                for folder_path in put.folder_path:
-                    data = getattr(utils, f"extract_{put.type.value.lower()}_data")(folder_path, put.parameters)
-                    if idx == 1:
-                        self.y_classes.extend([folder_path.name for _ in data])
-                    data_to_pass.extend(data)
-            else:
-                data_to_pass = self.y_classes
-                put.parameters.classes_names = [path.name for path in put.folder_path]
-            columns[f"{idx}_{put.type.value}"] = data_to_pass
+        preprocessing_data = {}
+        for put_id, cols_dict in put_data.items():
+            new_put_data[put_id] = {}
+            for col_name, put_data in cols_dict.items():
+                preprocessing_data[col_name] = None
+                if put_data.type in LayerInputTypeChoice:
+                    data_to_pass = []
+                    for folder_path in put_data.folder_path:
+                        data = getattr(utils, f"extract_{put_data.type.value.lower()}_data")(
+                            folder_path, put_data.parameters
+                        )
+                        if put_id == 1:
+                            self.y_classes.extend([folder_path.name for _ in data])
+                        data_to_pass.extend([str(path) for path in data])
+                else:
+                    data_to_pass = self.y_classes
+                    put_data.parameters.classes_names = [path.name for path in put_data.folder_path]
 
-            new_put_data[idx] = getattr(creation_data, f"{put_type}InstructionsData")(
-                type=put.type, parameters=put.parameters, columns=columns
-            )
-        return new_put_data
+                if "preprocessing" in put_data.parameters.dict() and put_data.parameters.preprocessing.value != 'None':
+                    preprocessing_data[col_name] = \
+                        getattr(preprocessings, f"create_{put_data.parameters.preprocessing.name}")(
+                            put_data.parameters
+                        )
+
+                put_type = "Input" if put_data.type in LayerInputTypeChoice else "Output"
+                new_put_data[put_id][col_name] = getattr(creation_data, f"{put_type}InstructionsData")(
+                    type=put_data.type, parameters=put_data.parameters, data=data_to_pass
+                )
+
+        return new_put_data, preprocessing_data
 
     def summary(self):
         super().summary()
-        print(f"\n\033[1mСписок классов:\033[0m", ' '.join(self.output[0].parameters.classes_names))
+        all_classes = {name: self.y_classes.count(name) for name in set(self.y_classes)}
+        text_to_print = f"\n\033[1mСписок классов и количество примеров:\033[0m"
+        for name, count in all_classes.items():
+            text_to_print += f"\n\033[1m{name}:\033[0m {count}"
+        print(text_to_print)

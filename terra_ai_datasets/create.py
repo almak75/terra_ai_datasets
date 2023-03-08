@@ -48,14 +48,14 @@ class ImageSegmentation(CreateDataset):
                          height=height, preprocessing=preprocessing, network=network, process=process,
                          rgb_range=rgb_range, classes=classes)
 
-    def preprocess_put_data(self, data, data_type: LayerSelectTypeChoice):
-        inputs_data, outputs_data = super().preprocess_put_data(data, data_type)
-        outputs_data[0].parameters.height = inputs_data[0].parameters.height
-        outputs_data[0].parameters.width = inputs_data[0].parameters.width
-        outputs_data[0].parameters.process = inputs_data[0].parameters.process
-        outputs_data[0].folder_path = data.target_path
-
-        return inputs_data, outputs_data
+    # def preprocess_put_data(self, data, data_type: LayerSelectTypeChoice):
+    #     inputs_data, outputs_data = super().preprocess_put_data(data, data_type)
+    #     outputs_data[0].parameters.height = inputs_data[0].parameters.height
+    #     outputs_data[0].parameters.width = inputs_data[0].parameters.width
+    #     outputs_data[0].parameters.process = inputs_data[0].parameters.process
+    #     outputs_data[0].folder_path = data.target_path
+    #
+    #     return inputs_data, outputs_data
 
     def summary(self):
         super().summary()
@@ -138,4 +138,4 @@ class AudioClassification(CreateClassificationDataset):
 
 class DataframeDataset(CreateDataset):
     input_type = LayerInputTypeChoice.Dataframe
-    output_type = "Dataset"
+    output_type = LayerOutputTypeChoice.Dataset

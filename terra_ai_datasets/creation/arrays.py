@@ -10,8 +10,9 @@ from tensorflow.keras.preprocessing.text import Tokenizer
 
 from terra_ai_datasets.creation.utils import resize_frame
 from terra_ai_datasets.creation.validators.inputs import ImageNetworkTypes, ImageValidator, TextValidator, \
-    TextProcessTypes, TextModeTypes, AudioValidator, AudioParameterTypes, AudioModeTypes
-from terra_ai_datasets.creation.validators.outputs import SegmentationValidator, ClassificationValidator
+    TextProcessTypes, TextModeTypes, AudioValidator, AudioParameterTypes, AudioModeTypes, RawValidator
+from terra_ai_datasets.creation.validators.outputs import SegmentationValidator, ClassificationValidator, \
+    RegressionValidator
 
 
 class Array(ABC):
@@ -117,6 +118,19 @@ class AudioArray(Array):
         return array
 
 
+class RawArray(Array):
+
+    def create(self, source: str, parameters: RawValidator):
+
+        array = np.array(source)
+
+        return array
+
+    def preprocess(self, array: np.ndarray, preprocess: Any, parameters: RawValidator):
+
+        return array
+
+
 class ClassificationArray(Array):
 
     def create(self, source: str, parameters: ClassificationValidator):
@@ -129,9 +143,13 @@ class ClassificationArray(Array):
 
         return array
 
-    def preprocess(self, array: np.ndarray, preprocess_obj, parameters: SegmentationValidator):
+    def preprocess(self, array: np.ndarray, preprocess: Any, parameters: ClassificationValidator):
 
         return array
+
+
+class CategoricalArray(ClassificationArray):
+    pass
 
 
 class SegmentationArray(Array):
@@ -140,15 +158,15 @@ class SegmentationArray(Array):
 
         image = Image.open(source)
         array = np.asarray(image)
-        array = resize_frame(image_array=array,
-                             target_shape=(parameters.height, parameters.width),
-                             frame_mode=parameters.process)
+        # array = resize_frame(image_array=array,
+        #                      target_shape=(parameters.height, parameters.width),
+        #                      frame_mode=parameters.process)
 
         array = self.image_to_ohe(array, parameters)
 
         return array
 
-    def preprocess(self, array: np.ndarray, preprocess_obj, parameters: SegmentationValidator):
+    def preprocess(self, array: np.ndarray, preprocess: Any, parameters: SegmentationValidator):
 
         return array
 
@@ -168,3 +186,21 @@ class SegmentationArray(Array):
             mask_ohe.append(color_array)
 
         return np.concatenate(np.array(mask_ohe), axis=2).astype(np.uint8)
+
+
+class RegressionArray(Array):
+
+    def create(self, source: str, parameters: RegressionValidator):
+
+        array = np.array(float(source))
+
+        return array
+
+    def preprocess(self, array: np.ndarray, preprocess: Any, parameters: RegressionValidator):
+
+        orig_shape = array.shape
+        array = array.reshape(-1, 1)
+        array = preprocess.transform(array)
+        array = array.reshape(orig_shape)
+
+        return array

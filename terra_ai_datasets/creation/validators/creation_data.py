@@ -1,17 +1,18 @@
 from typing import Optional, List, Any, Dict, Tuple
 
-from pydantic import BaseModel, PositiveInt, DirectoryPath
+from pydantic import BaseModel, PositiveInt, DirectoryPath, FilePath
 
 from terra_ai_datasets.creation.validators.tasks import LayerInputTypeChoice, LayerOutputTypeChoice
 
 
-class CSVData(BaseModel):
-    csv_path: DirectoryPath
-    columns: List[str]
+# class CSVData(BaseModel):
+#     csv_path: FilePath
+#     columns: List[str]
 
 
 class PutData(BaseModel):
-    csv_data: Optional[CSVData]
+    csv_path: Optional[FilePath]
+    column: Optional[str]
     folder_path: Optional[List[DirectoryPath]]
     parameters: Any
 
@@ -34,8 +35,7 @@ class OutputData(PutData):
 
 class BaseInstructionsData(BaseModel):
     parameters: Any
-    preprocess: dict = {}
-    columns: Dict[str, List]
+    data: Optional[List[str]]
 
 
 class InputInstructionsData(BaseInstructionsData):

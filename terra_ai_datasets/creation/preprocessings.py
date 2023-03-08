@@ -1,3 +1,5 @@
+from typing import Any
+
 import numpy as np
 from tensorflow.keras.preprocessing.text import Tokenizer
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
@@ -65,14 +67,14 @@ class TerraImageScaler:
         return array.astype('uint8')
 
 
-def create_min_max_scaler(parameters: ImageValidator):
+def create_min_max_scaler(parameters: Any):
 
     scaler = MinMaxScaler()
 
     return scaler
 
 
-def create_standard_scaler(parameters: ImageValidator):
+def create_standard_scaler(parameters: Any):
 
     scaler = StandardScaler()
 
