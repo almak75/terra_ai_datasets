@@ -278,7 +278,7 @@ class CreateDataset(TerraDataset):
                 parameters=getattr(inputs, f"{self.input_type.value}Validator")(**data.dict())
             )}
             puts_data[2] = {f"2_{self.output_type.value}": OutputData(
-                folder_path=data.source_path,
+                folder_path=data.target_path if "target_path" in data.__fields_set__ else data.source_path,
                 column=f"2_{self.output_type.value}",
                 type=self.output_type,
                 parameters=getattr(outputs, f"{self.output_type.value}Validator")(**data.dict())
