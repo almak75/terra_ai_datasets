@@ -11,7 +11,9 @@ from terra_ai_datasets.creation.validators.structure import DatasetData
 
 
 class LoadDataset(TerraDataset):
+
     def __init__(self, path_to_dataset: str):
+        super().__init__()
         path_to_dataset = Path(path_to_dataset)
         assert path_to_dataset.is_dir(), "Датасет по указанному пути не найден"
 

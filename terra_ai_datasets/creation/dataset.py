@@ -24,14 +24,16 @@ from terra_ai_datasets.creation.validators.tasks import LayerInputTypeChoice, La
 
 
 class TerraDataset:
-    X: Dict[str, Dict[int, np.ndarray]] = {"train": {}, "val": {}}
-    Y: Dict[str, Dict[int, np.ndarray]] = {"train": {}, "val": {}}
-    preprocessing: Dict[str, Any] = {}
-    dataframe: Dict[str, pd.DataFrame] = {}
-    dataset_data: DatasetData
-    put_instructions: Dict[int, Dict[str, Union[InputInstructionsData, OutputInstructionsData]]] = {}
 
-    _dataset: Dict[str, Dataset] = {"train": None, "val": None}
+    def __init__(self):
+        self.X: Dict[str, Dict[int, np.ndarray]] = {"train": {}, "val": {}}
+        self.Y: Dict[str, Dict[int, np.ndarray]] = {"train": {}, "val": {}}
+        self.preprocessing: Dict[str, Any] = {}
+        self.dataframe: Dict[str, pd.DataFrame] = {}
+        self.dataset_data: DatasetData
+        self.put_instructions: Dict[int, Dict[str, Union[InputInstructionsData, OutputInstructionsData]]] = {}
+
+        self._dataset: Dict[str, Dataset] = {"train": None, "val": None}
 
     @property
     def dataset(self):
@@ -227,6 +229,7 @@ class CreateDataset(TerraDataset):
     output_type: LayerOutputTypeChoice = None
 
     def __init__(self, **kwargs):
+        super().__init__()
         self.data = self._validate(
             getattr(dataset, f"{self.input_type}{self.output_type}Validator"), **kwargs
         )
@@ -350,7 +353,10 @@ class CreateDataset(TerraDataset):
 
 
 class CreateClassificationDataset(CreateDataset):
-    y_classes = []
+
+    def __init__(self, **kwargs):
+        self.y_classes = []
+        super().__init__(**kwargs)
 
     def create_put_instructions(self, put_data) -> \
             Tuple[Dict[int, Dict[str, Union[InputInstructionsData, OutputInstructionsData]]],
