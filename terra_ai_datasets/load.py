@@ -22,24 +22,23 @@ class LoadDataset(TerraDataset):
 
         for instr_path in dataset_paths_data.instructions.parameters.iterdir():
             put, put_id, put_type = instr_path.stem.split('_')
+            if not self.put_instructions.get(int(put_id)):
+                self.put_instructions[int(put_id)] = {}
             with open(instr_path, 'r') as conf:
-                put_data = getattr(creation_data, f"{put.capitalize()}Data")(**json.loads(json.load(conf)))
-            self.input.append(put_data) if put == 'input' else self.output.append(put_data)
+                self.put_instructions[int(put_id)][f"{put_id}_{put_type}"] = \
+                    getattr(creation_data, f"{put.capitalize()}InstructionsData")(**json.loads(json.load(conf)))
 
         with open(dataset_paths_data.config, 'r') as conf:
             self.dataset_data = DatasetData(**json.loads(json.load(conf)))
 
-        if self.dataset_data.is_created:
-            for put_id in range(1, len(self.input + self.output) + 1):
-                self.preprocessing[put_id] = None
-                prep_path = dataset_paths_data.preprocessing.joinpath(f"{put_id}.gz")
-                if prep_path.is_file():
-                    self.preprocessing[put_id] = joblib.load(prep_path)
+        for prep_path in dataset_paths_data.preprocessing.iterdir():
+            self.preprocessing[prep_path.stem] = joblib.load(prep_path)
 
+        if self.dataset_data.is_created:
             for split, dataframe in self.dataframe.items():
                 if self.dataset_data.use_generator:
                     self._dataset[split] = self.create_dataset_object_from_instructions(
-                        self.input, self.output, dataframe
+                        self.put_instructions, dataframe
                     )
                 else:
                     for array_path in dataset_paths_data.arrays.inputs.iterdir():

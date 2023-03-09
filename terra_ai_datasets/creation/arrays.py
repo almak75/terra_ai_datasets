@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-import librosa
 import numpy as np
 from PIL import Image
 from librosa import load as librosa_load
@@ -158,10 +157,9 @@ class SegmentationArray(Array):
 
         image = Image.open(source)
         array = np.asarray(image)
-        # array = resize_frame(image_array=array,
-        #                      target_shape=(parameters.height, parameters.width),
-        #                      frame_mode=parameters.process)
-
+        array = resize_frame(image_array=array,
+                             target_shape=(parameters.height, parameters.width),
+                             frame_mode=parameters.process)
         array = self.image_to_ohe(array, parameters)
 
         return array

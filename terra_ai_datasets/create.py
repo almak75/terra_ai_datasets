@@ -48,18 +48,25 @@ class ImageSegmentation(CreateDataset):
                          height=height, preprocessing=preprocessing, network=network, process=process,
                          rgb_range=rgb_range, classes=classes)
 
-    # def preprocess_put_data(self, data, data_type: LayerSelectTypeChoice):
-    #     inputs_data, outputs_data = super().preprocess_put_data(data, data_type)
-    #     outputs_data[0].parameters.height = inputs_data[0].parameters.height
-    #     outputs_data[0].parameters.width = inputs_data[0].parameters.width
-    #     outputs_data[0].parameters.process = inputs_data[0].parameters.process
-    #     outputs_data[0].folder_path = data.target_path
-    #
-    #     return inputs_data, outputs_data
+    def preprocess_put_data(self, data, data_type: LayerSelectTypeChoice):
+        puts_data = super().preprocess_put_data(data, data_type)
+
+        puts_data[2][f"2_{self.output_type.value}"].parameters.height = \
+            puts_data[1][f"1_{self.input_type.value}"].parameters.height
+        puts_data[2][f"2_{self.output_type.value}"].parameters.width = \
+            puts_data[1][f"1_{self.input_type.value}"].parameters.width
+        puts_data[2][f"2_{self.output_type.value}"].parameters.process = \
+            puts_data[1][f"1_{self.input_type.value}"].parameters.process
+
+        return puts_data
 
     def summary(self):
         super().summary()
-        print("столько то классов и тд")
+        text_to_print = f"\n\033[1mКлассы в масках сегментации и их цвета в RGB:\033[0m"
+        classes = self.put_instructions[2][f"2_{self.output_type.value}"].parameters.classes
+        for name, color in classes.items():
+            text_to_print += f"\n{name}: {color.as_rgb_tuple()}"
+        print(text_to_print)
 
 
 class TextClassification(CreateClassificationDataset):
@@ -121,19 +128,25 @@ class AudioClassification(CreateClassificationDataset):
         super().__init__(**parameters)
 
     def preprocess_put_data(self, data, data_type: LayerSelectTypeChoice):
-        _, outputs_data = super().preprocess_put_data(data, data_type)
+        put_data = super().preprocess_put_data(data, data_type)
 
-        inputs_data = []
-        for parameter in data.parameter:
-            params = data.dict()
-            params['parameter'] = [parameter]
-            inputs_data.append(InputData(
-                folder_path=data.source_path,
+        input_data = put_data[1][f"1_{self.input_type.value}"]
+        new_put_data = {}
+
+        for put_id, parameter in enumerate(input_data.parameters.parameter, 1):
+            new_params_data = input_data.parameters.dict()
+            new_params_data['parameter'] = [parameter]
+            new_input_data = InputData(
+                folder_path=input_data.folder_path,
                 type=self.input_type,
-                parameters=getattr(inputs, f"{self.input_type.value}Validator")(**params)
-            ))
+                parameters=getattr(inputs, f"{self.input_type.value}Validator")(**new_params_data)
+            )
+            new_put_data[put_id] = {f"{put_id}_Audio": new_input_data}
 
-        return inputs_data, outputs_data
+        new_put_data[len(new_put_data) + 1] = \
+            {f"{len(new_put_data) + 1}_{self.output_type.value}": put_data[2][f"2_{self.output_type.value}"]}
+
+        return new_put_data
 
 
 class DataframeDataset(CreateDataset):

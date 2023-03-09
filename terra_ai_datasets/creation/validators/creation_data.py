@@ -35,7 +35,7 @@ class OutputData(PutData):
 
 class BaseInstructionsData(BaseModel):
     parameters: Any
-    data: Optional[List[str]]
+    data: Optional[List[Any]]
 
 
 class InputInstructionsData(BaseInstructionsData):
