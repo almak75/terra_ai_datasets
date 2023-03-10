@@ -11,6 +11,7 @@ import pandas as pd
 import joblib
 
 from terra_ai_datasets.creation import arrays, preprocessings, utils
+from terra_ai_datasets.creation.utils import apply_pymorphy
 from terra_ai_datasets.creation.validators import creation_data
 from terra_ai_datasets.creation.validators.creation_data import InputData, OutputData, InputInstructionsData, \
     OutputInstructionsData
@@ -312,6 +313,10 @@ class CreateDataset(TerraDataset):
                                                                                           put_data.parameters)
                         )
 
+                if put_data.type == LayerInputTypeChoice.Text:
+                    if put_data.parameters.pymorphy:
+                        data_to_pass = apply_pymorphy(data_to_pass)
+
                 if "preprocessing" in put_data.parameters.dict() and put_data.parameters.preprocessing.value != 'None':
                     preprocessing_data[col_name] = \
                         getattr(preprocessings, f"create_{put_data.parameters.preprocessing.name}")(
@@ -377,6 +382,9 @@ class CreateClassificationDataset(CreateDataset):
                         if put_id == 1:
                             self.y_classes.extend([folder_path.name for _ in data])
                         data_to_pass.extend([str(path) for path in data])
+                    if put_data.type == LayerInputTypeChoice.Text:
+                        if put_data.parameters.pymorphy:
+                            data_to_pass = apply_pymorphy(data_to_pass)
                 else:
                     data_to_pass = self.y_classes
                     put_data.parameters.classes_names = [path.name for path in put_data.folder_path]

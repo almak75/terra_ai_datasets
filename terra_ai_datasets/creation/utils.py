@@ -5,6 +5,7 @@ from typing import Union
 import cv2
 import librosa
 import numpy as np
+import pymorphy2
 from pathlib import Path
 
 from tensorflow.keras.preprocessing.text import text_to_word_sequence
@@ -17,7 +18,7 @@ logger_formatter = logging.Formatter(f"%(asctime)s | %(message)s", "%H:%M:%S")
 stream_handler = logging.StreamHandler()
 stream_handler.setFormatter(logger_formatter)
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 logger.addHandler(stream_handler)
 logger.setLevel("INFO")
 
@@ -82,6 +83,18 @@ class DatasetPathsData:
     @property
     def config(self):
         return self.root_path.joinpath("config.json")
+
+
+def apply_pymorphy(data_to_process: list):
+    pymorphy = pymorphy2.MorphAnalyzer()
+
+    data_to_return = []
+    for text in data_to_process:
+        words_list = text.split(' ')
+        words_list = [pymorphy.parse(w)[0].normal_form for w in words_list]
+        data_to_return.append(' '.join(words_list))
+
+    return data_to_return
 
 
 def extract_image_data(folder_path: Path, parameters: Union[ImageValidator, SegmentationValidator]):

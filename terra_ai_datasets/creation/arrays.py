@@ -2,9 +2,10 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 import numpy as np
-from PIL import Image
-from librosa import load as librosa_load
+import pymorphy2
 import librosa.feature as librosa_feature
+from librosa import load as librosa_load
+from PIL import Image
 from tensorflow.keras.preprocessing.text import Tokenizer
 
 from terra_ai_datasets.creation.utils import resize_frame
