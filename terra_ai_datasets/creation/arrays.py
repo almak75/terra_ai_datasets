@@ -10,9 +10,10 @@ from tensorflow.keras.preprocessing.text import Tokenizer
 
 from terra_ai_datasets.creation.utils import resize_frame
 from terra_ai_datasets.creation.validators.inputs import ImageNetworkTypes, ImageValidator, TextValidator, \
-    TextProcessTypes, TextModeTypes, AudioValidator, AudioParameterTypes, AudioModeTypes, RawValidator
+    TextProcessTypes, TextModeTypes, AudioValidator, AudioParameterTypes, AudioModeTypes, RawValidator, \
+    TimeseriesValidator
 from terra_ai_datasets.creation.validators.outputs import SegmentationValidator, ClassificationValidator, \
-    RegressionValidator
+    RegressionValidator, DepthValidator, TrendValidator
 
 
 class Array(ABC):
@@ -133,6 +134,27 @@ class RawArray(Array):
         return array
 
 
+class TimeseriesArray(Array):
+
+    def create(self, source: list, parameters: TimeseriesValidator):
+
+        array = np.array(source)
+        if len(array) < parameters.length:
+            zeros = np.zeros((int(parameters.length - array.shape[0],)))
+            array = np.concatenate((array, zeros))
+
+        return array
+
+    def preprocess(self, array: np.ndarray, preprocess: Any, parameters: TimeseriesValidator):
+
+        orig_shape = array.shape
+        array = array.reshape(-1, 1)
+        array = preprocess.transform(array)
+        array = array.reshape(orig_shape)
+
+        return array
+
+
 class ClassificationArray(Array):
 
     def create(self, source: str, parameters: ClassificationValidator):
@@ -203,5 +225,47 @@ class RegressionArray(Array):
         array = array.reshape(-1, 1)
         array = preprocess.transform(array)
         array = array.reshape(orig_shape)
+
+        return array
+
+
+class DepthArray(Array):
+
+    def create(self, source: list, parameters: DepthValidator):
+
+        array = np.array(source)
+
+        return array
+
+    def preprocess(self, array: np.ndarray, preprocess: Any, parameters: DepthValidator):
+
+        orig_shape = array.shape
+        array = array.reshape(-1, 1)
+        array = preprocess.transform(array)
+        array = array.reshape(orig_shape)
+
+        return array
+
+
+class TrendArray(Array):
+
+    def create(self, source: list, parameters: TrendValidator):
+
+        source = np.array(source)
+        first_val, second_val = source[0], source[1]
+        if abs((second_val - first_val) / first_val) * 100 <= parameters.deviation:
+            array = 0
+        elif second_val > first_val:
+            array = 1
+        else:
+            array = 2
+        if parameters.one_hot_encoding:
+            ohe_array = np.zeros((3,))
+            ohe_array[array] = 1
+            array = ohe_array.astype(np.uint8)
+
+        return array
+
+    def preprocess(self, array: np.ndarray, preprocess: Any, parameters: TrendValidator):
 
         return array

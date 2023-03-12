@@ -12,7 +12,8 @@ class TasksChoice(str, Enum):
     DataframeClassification = "DataframeClassification"
     DataframeDataset = "DataframeDataset"
     DataframeRegression = "DataframeRegression"
-    DataframeTimeseries = "DataframeTimeseries"
+    TimeseriesDepth = "TimeseriesDepth"
+    TimeseriesTrend = "TimeseriesTrend"
 
 
 class LayerInputTypeChoice(str, Enum):
@@ -22,6 +23,7 @@ class LayerInputTypeChoice(str, Enum):
     Dataframe = "Dataframe"
     Categorical = "Categorical"
     Raw = "Raw"
+    Timeseries = "Timeseries"
     # Scaler = "Scaler"
 
 
@@ -30,8 +32,8 @@ class LayerOutputTypeChoice(str, Enum):
     Segmentation = "Segmentation"
     Regression = "Regression"
     Dataset = "Dataset"
-    Timeseries = "Timeseries"
-    TimeseriesTrend = "TimeseriesTrend"
+    Trend = "Trend"
+    Depth = "Depth"
 
 
 class LayerSelectTypeChoice(str, Enum):

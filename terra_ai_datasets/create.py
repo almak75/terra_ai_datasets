@@ -1,8 +1,9 @@
-from typing import Dict
+from typing import Dict, Union, Any
 
 from terra_ai_datasets.creation.dataset import CreateDataset, CreateClassificationDataset
-from terra_ai_datasets.creation.validators.creation_data import InputData
-from terra_ai_datasets.creation.validators import inputs
+from terra_ai_datasets.creation.validators.creation_data import InputData, OutputData
+from terra_ai_datasets.creation.validators import inputs as val_inputs
+from terra_ai_datasets.creation.validators import outputs as val_outputs
 from terra_ai_datasets.creation.validators.inputs import ImageScalers, TextModeTypes, TextProcessTypes
 from terra_ai_datasets.creation.validators.tasks import LayerInputTypeChoice, LayerOutputTypeChoice, \
     LayerSelectTypeChoice
@@ -139,7 +140,7 @@ class AudioClassification(CreateClassificationDataset):
             new_input_data = InputData(
                 folder_path=input_data.folder_path,
                 type=self.input_type,
-                parameters=getattr(inputs, f"{self.input_type.value}Validator")(**new_params_data)
+                parameters=getattr(val_inputs, f"{self.input_type.value}Validator")(**new_params_data)
             )
             new_put_data[put_id] = {f"{put_id}_Audio": new_input_data}
 
@@ -149,6 +150,105 @@ class AudioClassification(CreateClassificationDataset):
         return new_put_data
 
 
-class DataframeDataset(CreateDataset):
+class Dataframe(CreateDataset):
+
+    def __init__(
+            self,
+            csv_path: str,
+            train_size: float,
+            inputs: list,
+            outputs: list,
+            **kwargs
+    ):
+        super().__init__(csv_path=csv_path, inputs=inputs, outputs=outputs,  train_size=train_size, **kwargs)
+
+
+class DataframeRegression(Dataframe):
     input_type = LayerInputTypeChoice.Dataframe
-    output_type = LayerOutputTypeChoice.Dataset
+    output_type = LayerOutputTypeChoice.Regression
+
+
+class TimeseriesDepth(Dataframe):
+    input_type = LayerInputTypeChoice.Timeseries
+    output_type = LayerOutputTypeChoice.Depth
+
+    def __init__(
+            self,
+            csv_path: str,
+            train_size: float,
+            inputs: list,
+            outputs: list,
+            preprocessing: str,
+            length: int,
+            step: int,
+            depth: int,
+    ):
+        super().__init__(csv_path=csv_path, inputs=inputs, outputs=outputs,  train_size=train_size,
+                         preprocessing=preprocessing, length=length, step=step, depth=depth)
+
+    def preprocess_put_data(self, data, data_type: LayerSelectTypeChoice) -> \
+            Dict[int, Union[Dict[Any, Any], Dict[str, InputData], Dict[str, OutputData]]]:
+
+        puts_data = {1: {}, 2: {}}
+        for idx, col_name in enumerate(self.data.inputs, 1):
+            parameters_to_pass = {"csv_path": self.data.csv_path,
+                                  "column": col_name,
+                                  "type": self.input_type,
+                                  "parameters": getattr(val_inputs, f"{self.input_type.value}Validator")(
+                                      **self.data.dict())}
+            put_data = InputData(**parameters_to_pass)
+            puts_data[1][f"{idx}_{col_name}"] = put_data
+        for idx, col_name in enumerate(self.data.outputs, 1 + len(self.data.inputs)):
+            parameters_to_pass = {"csv_path": self.data.csv_path,
+                                  "column": col_name,
+                                  "type": self.output_type,
+                                  "parameters": getattr(val_outputs, f"{self.output_type.value}Validator")(
+                                      **self.data.dict())}
+            put_data = OutputData(**parameters_to_pass)
+            puts_data[2][f"{idx}_{col_name}"] = put_data
+
+        return puts_data
+
+
+class TimeseriesTrend(Dataframe):
+    input_type = LayerInputTypeChoice.Timeseries
+    output_type = LayerOutputTypeChoice.Trend
+
+    def __init__(
+            self,
+            csv_path: str,
+            train_size: float,
+            inputs: list,
+            outputs: list,
+            preprocessing: str,
+            length: int,
+            step: int,
+            deviation: float,
+            one_hot_encoding: bool
+    ):
+        super().__init__(csv_path=csv_path, inputs=inputs, outputs=outputs,  train_size=train_size,
+                         preprocessing=preprocessing, length=length, step=step, deviation=deviation,
+                         one_hot_encoding=one_hot_encoding)
+
+    def preprocess_put_data(self, data, data_type: LayerSelectTypeChoice) -> \
+            Dict[int, Union[Dict[Any, Any], Dict[str, InputData], Dict[str, OutputData]]]:
+
+        puts_data = {1: {}, 2: {}}
+        for idx, col_name in enumerate(self.data.inputs, 1):
+            parameters_to_pass = {"csv_path": self.data.csv_path,
+                                  "column": col_name,
+                                  "type": self.input_type,
+                                  "parameters": getattr(val_inputs, f"{self.input_type.value}Validator")(
+                                      **self.data.dict())}
+            put_data = InputData(**parameters_to_pass)
+            puts_data[1][f"{idx}_{col_name}"] = put_data
+        for idx, col_name in enumerate(self.data.outputs, 1 + len(self.data.inputs)):
+            parameters_to_pass = {"csv_path": self.data.csv_path,
+                                  "column": col_name,
+                                  "type": self.output_type,
+                                  "parameters": getattr(val_outputs, f"{self.output_type.value}Validator")(
+                                      **self.data.dict())}
+            put_data = OutputData(**parameters_to_pass)
+            puts_data[2][f"{idx}_{col_name}"] = put_data
+
+        return puts_data

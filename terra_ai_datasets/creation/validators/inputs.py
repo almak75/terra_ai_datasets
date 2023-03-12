@@ -132,3 +132,16 @@ class CategoricalValidator(BaseModel):
 
 class RawValidator(BaseModel):
     pass
+
+
+# --- Timeseries validators ---
+class TimeseriesScalers(str, Enum):
+    none = None
+    min_max_scaler = "MinMaxScaler"
+    standard_scaler = "StandardScaler"
+
+
+class TimeseriesValidator(BaseModel):
+    length: PositiveInt
+    step: PositiveInt
+    preprocessing: TimeseriesScalers

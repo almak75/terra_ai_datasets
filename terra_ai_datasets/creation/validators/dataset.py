@@ -4,8 +4,10 @@ from pathlib import Path
 from typing import List
 
 from pydantic import BaseModel, validator
+from pydantic.types import PositiveFloat
 
 from terra_ai_datasets.creation.validators import inputs, outputs
+from terra_ai_datasets.creation.validators.inputs import TimeseriesValidator
 from terra_ai_datasets.creation.validators.tasks import LayerInputTypeChoice, LayerOutputTypeChoice
 
 
@@ -112,3 +114,13 @@ class DataframeOutputData(DataframePutData):
 class DataframeDatasetValidator(FilePathValidator):
     inputs: List[DataframeInputData]
     outputs: List[DataframeOutputData]
+
+
+class TimeseriesDepthValidator(FilePathValidator, inputs.TimeseriesValidator, outputs.DepthValidator):
+    inputs: List[str]
+    outputs: List[str]
+
+
+class TimeseriesTrendValidator(FilePathValidator, inputs.TimeseriesValidator, outputs.TrendValidator):
+    inputs: List[str]
+    outputs: List[str]

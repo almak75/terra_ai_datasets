@@ -31,7 +31,7 @@ class TerraDataset:
         self.Y: Dict[str, Dict[int, np.ndarray]] = {"train": {}, "val": {}}
         self.preprocessing: Dict[str, Any] = {}
         self.dataframe: Dict[str, pd.DataFrame] = {}
-        self.dataset_data: DatasetData
+        self.dataset_data: DatasetData = None
         self.put_instructions: Dict[int, Dict[str, Union[InputInstructionsData, OutputInstructionsData]]] = {}
 
         self._dataset: Dict[str, Dataset] = {"train": None, "val": None}
@@ -117,11 +117,23 @@ class TerraDataset:
                 put_array = []
                 for col_name, put_data in cols_dict.items():
                     col_array = []
+                    length, step, offset, total_samples = 1, 1, 0, len(dataframe)
+                    if put_data.type in \
+                            [LayerInputTypeChoice.Timeseries, LayerOutputTypeChoice.Depth, LayerOutputTypeChoice.Trend]:
+                        length = put_data.parameters.length
+                        step = put_data.parameters.step
+                        total_samples -= length * 2
+                        if put_data.type in [LayerOutputTypeChoice.Depth, LayerOutputTypeChoice.Trend]:
+                            offset = put_data.parameters.length
+                            if put_data.type == LayerOutputTypeChoice.Trend:
+                                offset -= 1
                     for row_idx in tqdm(
-                            range(len(dataframe)),
+                            range(0, total_samples, step),
                             desc=f"{datetime.now().strftime('%H:%M:%S')} | Формирование массивов {split} - {put_data.type} - {col_name}"
                     ):
-                        sample_array = self.create_put_array(dataframe.loc[row_idx, col_name], put_data)
+                        data_to_send = dataframe.loc[row_idx+offset:row_idx+offset+length-1, col_name].to_list()
+                        data_to_send = data_to_send[0] if len(data_to_send) == 1 else data_to_send
+                        sample_array = self.create_put_array(data_to_send, put_data)
                         if self.preprocessing.get(col_name) and split == "train":
                             if put_data.type == LayerInputTypeChoice.Text:
                                 self.preprocessing[col_name].fit_on_texts(sample_array.split())
@@ -138,7 +150,9 @@ class TerraDataset:
                         put_array.append(col_array if len(col_array) > 1 else col_array[0])
 
                 if not use_generator:
-                    if len(put_array) > 1:
+                    if put_data.type in [LayerInputTypeChoice.Timeseries, LayerOutputTypeChoice.Depth]:
+                        put_array = np.moveaxis(np.array(put_array), [1, 2], [0, 1])
+                    elif len(put_array) > 1:
                         put_array = np.concatenate(put_array, axis=1)
                     else:
                         put_array = np.concatenate(put_array, axis=0)
@@ -239,7 +253,11 @@ class CreateDataset(TerraDataset):
             if self.input_type == LayerInputTypeChoice.Dataframe else LayerSelectTypeChoice.folder
         )
         self.put_instructions, self.preprocessing = self.create_put_instructions(put_data=self.put_data)
-        self.dataframe = self.create_table(self.put_instructions, train_size=self.data.train_size)
+        self.dataframe = self.create_table(
+            self.put_instructions,
+            train_size=self.data.train_size,
+            shuffle=True if self.input_type != LayerInputTypeChoice.Timeseries else False
+        )
 
         self.dataset_data = DatasetData(
             task=self.input_type.value + self.output_type.value,

@@ -14,6 +14,10 @@ class RegressionScalers(str, Enum):
     standard_scaler = "StandardScaler"
 
 
+class RegressionValidator(BaseModel):
+    preprocessing: RegressionScalers = RegressionScalers.none
+
+
 class ClassificationValidator(BaseModel):
     one_hot_encoding: bool
     classes_names: Optional[List[str]]
@@ -27,5 +31,23 @@ class SegmentationValidator(BaseModel):
     process: Optional[ImageProcessTypes]
 
 
-class RegressionValidator(BaseModel):
-    preprocessing: RegressionScalers = RegressionScalers.none
+# --- Timeseries validators ---
+class DepthScalers(str, Enum):
+    none = None
+    min_max_scaler = "MinMaxScaler"
+    standard_scaler = "StandardScaler"
+
+
+class DepthValidator(BaseModel):
+    depth: PositiveInt
+    preprocessing: DepthScalers
+    length: Optional[PositiveInt]
+    step: Optional[PositiveInt]
+
+
+class TrendValidator(BaseModel):
+    deviation: float
+    one_hot_encoding: bool
+    classes_names: List[str] = ["Не изменился", "Вверх", "Вниз"]
+    length: Optional[PositiveInt]
+    step: Optional[PositiveInt]
