@@ -1,6 +1,7 @@
 from typing import Any
 
 import numpy as np
+from gensim.models import Word2Vec
 from tensorflow.keras.preprocessing.text import Tokenizer
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
@@ -14,12 +15,8 @@ class TerraImageScaler:
     def __init__(self, height: int, width: int):
 
         self.shape: tuple = (height, width)
-        self.trained_values: dict = {'red': {'min': np.full(self.shape, 255, dtype='uint8'),
-                                             'max': np.zeros(self.shape, dtype='uint8')},
-                                     'green': {'min': np.full(self.shape, 255, dtype='uint8'),
-                                               'max': np.zeros(self.shape, dtype='uint8')},
-                                     'blue': {'min': np.full(self.shape, 255, dtype='uint8'),
-                                              'max': np.zeros(self.shape, dtype='uint8')}}
+        self.trained_values: dict = {ch: {'min': np.full(self.shape, 255, dtype='uint8'),
+                                          'max': np.zeros(self.shape, dtype='uint8')} for ch in self.channels}
 
     def fit(self, img):
         for i, channel in enumerate(self.channels):
@@ -45,6 +42,9 @@ class TerraImageScaler:
         array[array < self.range[0]] = self.range[0]
         array[array > self.range[1]] = self.range[1]
 
+        if np.isnan(array).any():
+            array = np.nan_to_num(array)
+
         return array
 
     def inverse_transform(self, img):
@@ -64,7 +64,7 @@ class TerraImageScaler:
         array[array < 0] = 0
         array[array > 255] = 255
 
-        return array.astype('uint8')
+        return array.astype(np.uint8)
 
 
 def create_min_max_scaler(parameters: Any):
@@ -107,17 +107,11 @@ def create_embedding(parameters: TextValidator):
     return create_tokenizer(parameters)
 
 
-# def create_word2vec(text_list: list, options):
-#
-#     text_list = [elem.split(' ') for elem in text_list]
-#     word2vec = Word2Vec(text_list, **{'size': options['size'],
-#                                       'window': options['window'],
-#                                       'min_count': options['min_count'],
-#                                       'workers': options['workers'],
-#                                       'iter': options['iter']
-#                                       }
-#                         )
-#     return word2vec
+def create_word_to_vec(text_list: list, parameters: TextValidator):
+
+    text_list = [elem.split(' ') for elem in text_list]
+    word2vec = Word2Vec(text_list, size=parameters.word2vec_size)
+    return word2vec
 
 
 # def inverse_data(self, options: dict):

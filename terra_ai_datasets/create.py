@@ -24,8 +24,20 @@ class ImageClassification(CreateClassificationDataset):
             preprocessing: str = ImageScalers.none,
             one_hot_encoding: bool = True
     ):
-        super().__init__(source_path=source_path, train_size=train_size, width=width, height=height, network=network,
-                         process=process, preprocessing=preprocessing, one_hot_encoding=one_hot_encoding)
+        """
+        Класс подготовки датасета для задачи классификации изображений.
+
+        :param source_path: Список относительных путей до папок с изображениями;
+        :param train_size: Соотношение обучающей выборки к валидационной;
+        :param width: Ширина изображений;
+        :param height: Высота изображений;
+        :param process: Метод обработки изображений при изменении размерности. Варианты: "Stretch", "Fit", "Cut";
+        :param network: Постобработка массивов под определенный вид нейронной сети. Варианты: "Convolutional", "Linear";
+        :param preprocessing: Выбор скейлера. Варианты: "None", "MinMaxScaler", "TerraImageScaler";
+        :param one_hot_encoding: Перевод Y массивов в формат One-Hot Encoding.
+        """
+        super().__init__(source_path=source_path, train_size=train_size, width=width, height=height, process=process,
+                         network=network, preprocessing=preprocessing, one_hot_encoding=one_hot_encoding)
 
 
 class ImageSegmentation(CreateDataset):
@@ -45,8 +57,22 @@ class ImageSegmentation(CreateDataset):
             classes: Dict[str, list],
             preprocessing: str = ImageScalers.none
     ):
+        """
+        Класс подготовки датасета для задачи сегментации изображений.
+
+        :param source_path: Список относительных путей до папок с изображениями;
+        :param target_path: Список относительных путей до папок с масками сегментации;
+        :param train_size: Соотношение обучающей выборки к валидационной;
+        :param width: Ширина изображений;
+        :param height: Высота изображений;
+        :param process: Метод обработки изображений при изменении размерности. Варианты: "Stretch", "Fit", "Cut";
+        :param network: Постобработка массивов под определенный вид нейронной сети. Варианты: "Convolutional", "Linear";
+        :param preprocessing: Выбор скейлера. Варианты: "None", "MinMaxScaler", "TerraImageScaler";
+        :param rgb_range: Диапазон, при котором пиксели будут отнесены к классу;
+        :param classes: Названия классов и их RGB значения в виде словаря.
+        """
         super().__init__(source_path=source_path, target_path=target_path, train_size=train_size,  width=width,
-                         height=height, preprocessing=preprocessing, network=network, process=process,
+                         height=height, process=process, network=network, preprocessing=preprocessing,
                          rgb_range=rgb_range, classes=classes)
 
     def preprocess_put_data(self, data, data_type: LayerSelectTypeChoice):
@@ -79,7 +105,8 @@ class TextClassification(CreateClassificationDataset):
             source_path: list,
             train_size: float,
             preprocessing: str = TextProcessTypes.embedding,
-            max_words_count: int = 20000,
+            max_words_count: int = None,
+            word2vec_size: int = None,
             mode: str = TextModeTypes.full,
             filters: str = '–—!"#$%&()*+,-./:;<=>?@[\\]^«»№_`{|}~\t\n\xa0–\ufeff',
             max_words: int = None,
@@ -88,11 +115,27 @@ class TextClassification(CreateClassificationDataset):
             pymorphy: bool = False,
             one_hot_encoding: bool = True
     ):
+        """
+        Класс подготовки датасета для задачи классификации текстов.
+
+        :param source_path: Список относительных путей до папок с изображениями;
+        :param train_size: Соотношение обучающей выборки к валидационной;
+        :param preprocessing: Тип обработки текстов. Варианты: "Embedding", "Bag of words", "Word2Vec";
+        :param max_words_count: Максимальное количество слов, сохраняемое в словаре частотности;
+        :param mode: Режим обрезки текстовых файлов. Варианты: "Full", "Length and step";
+        :param filters: Символы, подлежащие удалению;
+        :param pymorphy: Применить морфологический анализатор (приведение слов в нормальную форму);
+        :param max_words: ТОЛЬКО при mode == "Full" - Максимальное количество слов, извлекаемое из одного файла;
+        :param length: ТОЛЬКО при mode == "Length and step" - Количество слов в одном примере;
+        :param step: ТОЛЬКО при mode == "Length and step" - Шаг движения по тексту при составлении примеров;
+        :param one_hot_encoding: Перевод Y массивов в формат One-Hot Encoding.
+        """
         parameters = {"source_path": source_path, "train_size": train_size, "preprocessing": preprocessing,
                       "max_words_count": max_words_count, "mode": mode, "filters": filters, "pymorphy": pymorphy,
                       "one_hot_encoding": one_hot_encoding}
 
-        for name, param in {"max_words": max_words, "length": length, "step": step}.items():
+        for name, param in {"max_words": max_words, "length": length, "step": step,
+                            "word2vec_size": word2vec_size}.items():
             if param:
                 parameters[name] = param
 
@@ -118,6 +161,22 @@ class AudioClassification(CreateClassificationDataset):
             preprocessing: str = 'None',
             one_hot_encoding: bool = True
     ):
+        """
+        Класс подготовки датасета для задачи классификации аудио.
+
+        :param source_path: Список относительных путей до папок с изображениями;
+        :param train_size: Соотношение обучающей выборки к валидационной;
+        :param mode: Режим обрезки аудио файлов. Варианты: "Full", "Length and step";
+        :param parameter: Спсиок извлекаемых фичей из аудио файлов;
+        :param fill_mode: Режим заполнения при недостатке длины. Варианты: "Loop", "Last millisecond";
+        :param resample: Режим ресемпла при открытии аудио файла. Варианты: "Kaiser best", "Kaiser fast", "Scipy";
+        :param max_seconds: ТОЛЬКО при mode == "Full" - Максимальное количество секунд, извлекаемое из одного файла;
+        :param length: ТОЛЬКО при mode == "Length and step" - Длина одного примера;
+        :param step: ТОЛЬКО при mode == "Length and step" - Шаг движения по аудиофайлу при составлении примеров;
+        :param sample_rate: Sample rate при открытии аудиофайла;
+        :param preprocessing: Выбор скейлера. Варианты: "StandardScaler", "MinMaxScaler";
+        :param one_hot_encoding: Перевод Y массивов в формат One-Hot Encoding.
+        """
         parameters = {"source_path": source_path, "train_size": train_size, "preprocessing": preprocessing,
                       "parameter": parameter, "mode": mode, "sample_rate": sample_rate, "fill_mode": fill_mode,
                       "resample": resample, "one_hot_encoding": one_hot_encoding}
@@ -183,6 +242,18 @@ class TimeseriesDepth(Dataframe):
             step: int,
             depth: int,
     ):
+        """
+        Класс подготовки датасета для задачи временных рядов.
+
+        :param csv_path: Путь до csv-файла;
+        :param train_size: Соотношение обучающей выборки к валидационной;
+        :param inputs: Список колонок, используемых в качестве входа;
+        :param outputs: Список колонок, используемых в качестве выхода;
+        :param preprocessing: Выбор скейлера. Варианты: "StandardScaler", "MinMaxScaler";
+        :param length: Длина одного примера;
+        :param step: Шаг движения по аудиофайлу при составлении примеров;
+        :param depth: Глубина предсказания;
+        """
         super().__init__(csv_path=csv_path, inputs=inputs, outputs=outputs,  train_size=train_size,
                          preprocessing=preprocessing, length=length, step=step, depth=depth)
 
@@ -226,6 +297,19 @@ class TimeseriesTrend(Dataframe):
             deviation: float,
             one_hot_encoding: bool
     ):
+        """
+        Класс подготовки датасета для задачи временных рядов с предсказанием тренда.
+
+        :param csv_path: Путь до csv-файла;
+        :param train_size: Соотношение обучающей выборки к валидационной;
+        :param inputs: Список колонок, используемых в качестве входа;
+        :param outputs: Список колонок, используемых в качестве выхода;
+        :param preprocessing: Выбор скейлера. Варианты: "StandardScaler", "MinMaxScaler";
+        :param length: Длина одного примера;
+        :param step: Шаг движения по аудиофайлу при составлении примеров;
+        :param deviation: Отклонение нулевого тренда в процентах;
+        :param one_hot_encoding: Перевод Y массивов в формат One-Hot Encoding.
+        """
         super().__init__(csv_path=csv_path, inputs=inputs, outputs=outputs,  train_size=train_size,
                          preprocessing=preprocessing, length=length, step=step, deviation=deviation,
                          one_hot_encoding=one_hot_encoding)

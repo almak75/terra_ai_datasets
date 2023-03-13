@@ -8,6 +8,6 @@ pillow==7.1.2
 tqdm==4.64.1
 scikit-learn>=1.0.2
 tensorflow>=2.0
-h5py~=3.8.0
 joblib==1.1.0
 pymorphy2==0.9.1
+gensim==3.6.0

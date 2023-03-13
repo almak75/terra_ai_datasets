@@ -17,7 +17,7 @@ from terra_ai_datasets.creation.validators.creation_data import InputData, Outpu
     OutputInstructionsData
 from terra_ai_datasets.creation.validators import dataset
 from terra_ai_datasets.creation.validators import inputs, outputs
-from terra_ai_datasets.creation.validators.inputs import CategoricalValidator
+from terra_ai_datasets.creation.validators.inputs import CategoricalValidator, ImageScalers, TextProcessTypes
 from terra_ai_datasets.creation.validators.structure import DatasetData
 
 from terra_ai_datasets.creation.validators.tasks import LayerInputTypeChoice, LayerOutputTypeChoice, \
@@ -109,9 +109,14 @@ class TerraDataset:
                 for col_name, put_data in cols_dict.items():
                     if split == "train":
                         if "preprocessing" in put_data.parameters.dict() and put_data.parameters.preprocessing.value != 'None':
+                            create_preprocessing_parameters = {"parameters": put_data.parameters}
+                            if put_data.parameters.preprocessing == TextProcessTypes.word_to_vec:
+                                create_preprocessing_parameters.update(
+                                    {"text_list": dataframe[col_name].to_list()}
+                                )
                             self.preprocessing[col_name] = \
                                 getattr(preprocessings, f"create_{put_data.parameters.preprocessing.name}")(
-                                    put_data.parameters
+                                    **create_preprocessing_parameters
                                 )
 
                 put_array = []
@@ -136,7 +141,10 @@ class TerraDataset:
                         sample_array = self.create_put_array(data_to_send, put_data)
                         if self.preprocessing.get(col_name) and split == "train":
                             if put_data.type == LayerInputTypeChoice.Text:
-                                self.preprocessing[col_name].fit_on_texts(sample_array.split())
+                                if put_data.parameters.preprocessing != TextProcessTypes.word_to_vec:
+                                    self.preprocessing[col_name].fit_on_texts(sample_array.split())
+                            elif put_data.type == LayerInputTypeChoice.Image and put_data.parameters.preprocessing == ImageScalers.terra_image_scaler:
+                                self.preprocessing[col_name].fit(sample_array)
                             else:
                                 self.preprocessing[col_name].fit(sample_array.reshape(-1, 1))
                         if not use_generator:
@@ -252,7 +260,7 @@ class CreateDataset(TerraDataset):
             data=self.data, data_type=LayerSelectTypeChoice.table
             if self.input_type == LayerInputTypeChoice.Dataframe else LayerSelectTypeChoice.folder
         )
-        self.put_instructions, self.preprocessing = self.create_put_instructions(put_data=self.put_data)
+        self.put_instructions = self.create_put_instructions(put_data=self.put_data)
         self.dataframe = self.create_table(
             self.put_instructions,
             train_size=self.data.train_size,
@@ -306,17 +314,15 @@ class CreateDataset(TerraDataset):
         return puts_data
 
     @staticmethod
-    def create_put_instructions(put_data) -> \
-            Tuple[Dict[int, Dict[str, Union[InputInstructionsData, OutputInstructionsData]]],
-                  Dict[int, Dict[str, Any]]]:
+    def create_put_instructions(put_data) -> Dict[int, Dict[str, Union[InputInstructionsData, OutputInstructionsData]]]:
 
         new_put_data = {}
-        preprocessing_data = {}
+        # preprocessing_data = {}
         for put_id, cols_dict in put_data.items():
             new_put_data[put_id] = {}
             for col_name, put_data in cols_dict.items():
                 data_to_pass = []
-                preprocessing_data[col_name] = {}
+                # preprocessing_data[col_name] = {}
                 if put_data.csv_path:
                     csv_table = pd.read_csv(put_data.csv_path, usecols=[put_data.column])
                     data_to_pass = csv_table.loc[:, put_data.column].tolist()
@@ -335,11 +341,12 @@ class CreateDataset(TerraDataset):
                     if put_data.parameters.pymorphy:
                         data_to_pass = apply_pymorphy(data_to_pass)
 
-                if "preprocessing" in put_data.parameters.dict() and put_data.parameters.preprocessing.value != 'None':
-                    preprocessing_data[col_name] = \
-                        getattr(preprocessings, f"create_{put_data.parameters.preprocessing.name}")(
-                            put_data.parameters
-                        )
+                # if "preprocessing" in put_data.parameters.dict() and put_data.parameters.preprocessing.value not in \
+                #         ['None', TextProcessTypes.word_to_vec]:
+                #     preprocessing_data[col_name] = \
+                #         getattr(preprocessings, f"create_{put_data.parameters.preprocessing.name}")(
+                #             put_data.parameters
+                #         )
 
                 put_type = "Input" if put_data.type in LayerInputTypeChoice else "Output"
                 parameters = put_data.parameters
@@ -349,7 +356,7 @@ class CreateDataset(TerraDataset):
                     type=put_data.type, parameters=parameters, data=data_to_pass
                 )
 
-        return new_put_data, preprocessing_data
+        return new_put_data#, preprocessing_data
 
     @staticmethod
     def create_table(put_instructions: Dict[int, Dict[str, Union[InputInstructionsData, OutputInstructionsData]]],
@@ -381,16 +388,14 @@ class CreateClassificationDataset(CreateDataset):
         self.y_classes = []
         super().__init__(**kwargs)
 
-    def create_put_instructions(self, put_data) -> \
-            Tuple[Dict[int, Dict[str, Union[InputInstructionsData, OutputInstructionsData]]],
-                  Dict[int, Dict[str, Any]]]:
+    def create_put_instructions(self, put_data) -> Dict[int, Dict[str, Union[InputInstructionsData, OutputInstructionsData]]]:
 
         new_put_data = {}
-        preprocessing_data = {}
+        # preprocessing_data = {}
         for put_id, cols_dict in put_data.items():
             new_put_data[put_id] = {}
             for col_name, put_data in cols_dict.items():
-                preprocessing_data[col_name] = None
+                # preprocessing_data[col_name] = None
                 if put_data.type in LayerInputTypeChoice:
                     data_to_pass = []
                     for folder_path in put_data.folder_path:
@@ -407,18 +412,19 @@ class CreateClassificationDataset(CreateDataset):
                     data_to_pass = self.y_classes
                     put_data.parameters.classes_names = [path.name for path in put_data.folder_path]
 
-                if "preprocessing" in put_data.parameters.dict() and put_data.parameters.preprocessing.value != 'None':
-                    preprocessing_data[col_name] = \
-                        getattr(preprocessings, f"create_{put_data.parameters.preprocessing.name}")(
-                            put_data.parameters
-                        )
+                # if "preprocessing" in put_data.parameters.dict() and put_data.parameters.preprocessing.value not in\
+                #         ['None', TextProcessTypes.word_to_vec]:
+                #     preprocessing_data[col_name] = \
+                #         getattr(preprocessings, f"create_{put_data.parameters.preprocessing.name}")(
+                #             put_data.parameters
+                #         )
 
                 put_type = "Input" if put_data.type in LayerInputTypeChoice else "Output"
                 new_put_data[put_id][col_name] = getattr(creation_data, f"{put_type}InstructionsData")(
                     type=put_data.type, parameters=put_data.parameters, data=data_to_pass
                 )
 
-        return new_put_data, preprocessing_data
+        return new_put_data#, preprocessing_data
 
     def summary(self):
         super().summary()

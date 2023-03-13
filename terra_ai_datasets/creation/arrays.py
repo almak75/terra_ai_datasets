@@ -11,7 +11,7 @@ from tensorflow.keras.preprocessing.text import Tokenizer
 from terra_ai_datasets.creation.utils import resize_frame
 from terra_ai_datasets.creation.validators.inputs import ImageNetworkTypes, ImageValidator, TextValidator, \
     TextProcessTypes, TextModeTypes, AudioValidator, AudioParameterTypes, AudioModeTypes, RawValidator, \
-    TimeseriesValidator
+    TimeseriesValidator, ImageScalers
 from terra_ai_datasets.creation.validators.outputs import SegmentationValidator, ClassificationValidator, \
     RegressionValidator, DepthValidator, TrendValidator
 
@@ -42,9 +42,14 @@ class ImageArray(Array):
         return array
 
     def preprocess(self, array: np.ndarray, preprocess_obj: Any, parameters: ImageValidator) -> np.ndarray:
-        orig_shape = array.shape
-        array = preprocess_obj.transform(array.reshape(-1, 1)).astype('float32')
-        array = array.reshape(orig_shape)
+        if parameters.preprocessing == ImageScalers.terra_image_scaler:
+            array = array.astype(np.float32)
+            for i in range(len(array)):
+                array[i] = preprocess_obj.transform(array[i])
+        else:
+            orig_shape = array.shape
+            array = preprocess_obj.transform(array.reshape(-1, 1)).astype(np.float32)
+            array = array.reshape(orig_shape)
 
         return array
 
@@ -69,6 +74,17 @@ class TextArray(Array):
                     text_array += [0 for _ in range(parameters.length - len(text_array))]
             elif parameters.preprocessing == TextProcessTypes.bag_of_words:
                 text_array = preprocess_obj.texts_to_matrix([text])[0]
+            elif parameters.preprocessing == TextProcessTypes.word_to_vec:
+                text_array = []
+                for word in text.split(' '):
+                    try:
+                        text_array.append(preprocess_obj.wv[word])
+                    except KeyError:
+                        text_array.append(np.zeros((parameters.word2vec_size,)))
+                if len(text_array) < parameters.length:
+                    words_to_add = [[0 for _ in range(parameters.word2vec_size)]
+                                    for _ in range(parameters.length - len(text_array))]
+                    text_array += words_to_add
             array.append(text_array)
 
         return np.array(array)

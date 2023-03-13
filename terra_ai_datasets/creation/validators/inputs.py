@@ -40,14 +40,15 @@ class TextModeTypes(str, Enum):
 class TextProcessTypes(str, Enum):
     embedding = "Embedding"
     bag_of_words = "Bag of words"
-    # word_to_vec = "Word2Vec"
+    word_to_vec = "Word2Vec"
 
 
 class TextValidator(BaseModel):
     filters: str = '–—!"#$%&()*+,-./:;<=>?@[\\]^«»№_`{|}~\t\n\xa0–\ufeff'
-    max_words_count: PositiveInt
-    mode: TextModeTypes
     preprocessing: TextProcessTypes
+    max_words_count: Optional[PositiveInt]
+    word2vec_size: Optional[PositiveInt]
+    mode: TextModeTypes
     pymorphy: bool
     max_words: Optional[PositiveInt]
     length: Optional[PositiveInt]
@@ -63,6 +64,16 @@ class TextValidator(BaseModel):
             cls.__fields__["max_words"].required = False
             cls.__fields__["length"].required = True
             cls.__fields__["step"].required = True
+        return value
+
+    @validator("preprocessing")
+    def _validate_preprocessing(cls, value):
+        if value == TextProcessTypes.word_to_vec:
+            cls.__fields__["max_words_count"].required = False
+            cls.__fields__["word2vec_size"].required = True
+        else:
+            cls.__fields__["max_words_count"].required = True
+            cls.__fields__["word2vec_size"].required = False
         return value
 
 
