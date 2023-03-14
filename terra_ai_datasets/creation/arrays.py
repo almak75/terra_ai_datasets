@@ -241,10 +241,10 @@ class RegressionArray(Array):
 
     def preprocess(self, array: np.ndarray, preprocess: Any, parameters: RegressionValidator):
 
-        # orig_shape = array.shape
-        # array = array.reshape(-1, 1)
+        orig_shape = array.shape
+        array = array.reshape(-1, 1)
         array = preprocess.transform(array)
-        # array = array.reshape(orig_shape)
+        array = array.reshape(orig_shape)
 
         return array
 
