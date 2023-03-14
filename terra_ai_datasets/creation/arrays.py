@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
+import cv2
 import numpy as np
 import pymorphy2
 import librosa.feature as librosa_feature
@@ -44,8 +45,11 @@ class ImageArray(Array):
     def preprocess(self, array: np.ndarray, preprocess_obj: Any, parameters: ImageValidator) -> np.ndarray:
         if parameters.preprocessing == ImageScalers.terra_image_scaler:
             array = array.astype(np.float32)
-            for i in range(len(array)):
-                array[i] = preprocess_obj.transform(array[i])
+            if len(array.shape) > 3:
+                for i in range(len(array)):
+                    array[i] = preprocess_obj.transform(array[i])
+            else:
+                array = preprocess_obj.transform(array)
         else:
             orig_shape = array.shape
             array = preprocess_obj.transform(array.reshape(-1, 1)).astype(np.float32)
@@ -63,6 +67,8 @@ class TextArray(Array):
     def preprocess(self, text_list: list, preprocess_obj: Tokenizer, parameters: TextValidator) -> np.ndarray:
 
         array = []
+        if not type(text_list) == np.ndarray:
+            text_list = [text_list]
         for text in text_list:
             if parameters.preprocessing == TextProcessTypes.embedding:
                 text_array = preprocess_obj.texts_to_sequences([text])[0]
@@ -141,7 +147,7 @@ class RawArray(Array):
 
     def create(self, source: str, parameters: RawValidator):
 
-        array = np.array(source)
+        array = np.array([source])
 
         return array
 
@@ -155,9 +161,7 @@ class TimeseriesArray(Array):
     def create(self, source: list, parameters: TimeseriesValidator):
 
         array = np.array(source)
-        if len(array) < parameters.length:
-            zeros = np.zeros((int(parameters.length - array.shape[0],)))
-            array = np.concatenate((array, zeros))
+        array = np.expand_dims(array, 1)
 
         return array
 
@@ -231,16 +235,16 @@ class RegressionArray(Array):
 
     def create(self, source: str, parameters: RegressionValidator):
 
-        array = np.array(float(source))
+        array = np.array([float(source)])
 
         return array
 
     def preprocess(self, array: np.ndarray, preprocess: Any, parameters: RegressionValidator):
 
-        orig_shape = array.shape
-        array = array.reshape(-1, 1)
+        # orig_shape = array.shape
+        # array = array.reshape(-1, 1)
         array = preprocess.transform(array)
-        array = array.reshape(orig_shape)
+        # array = array.reshape(orig_shape)
 
         return array
 
@@ -250,6 +254,7 @@ class DepthArray(Array):
     def create(self, source: list, parameters: DepthValidator):
 
         array = np.array(source)
+        array = np.expand_dims(array, 1)
 
         return array
 

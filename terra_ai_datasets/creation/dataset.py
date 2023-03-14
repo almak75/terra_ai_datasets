@@ -24,6 +24,24 @@ from terra_ai_datasets.creation.validators.tasks import LayerInputTypeChoice, La
     LayerSelectTypeChoice
 
 
+def postprocess_put_array(put_arr: list, put_data_type: Union[LayerInputTypeChoice, LayerOutputTypeChoice]) \
+        -> np.ndarray:
+    if put_data_type in [LayerInputTypeChoice.Timeseries, LayerOutputTypeChoice.Depth]:
+        # put_arr = np.moveaxis(np.array(put_arr), [1, 2], [0, 1])
+        put_arr = np.concatenate(put_arr, axis=2)
+        pass
+    # arrays
+    elif all([len(np.array(arr).shape) >= 2 for arr in put_arr]):
+        put_arr = np.concatenate(put_arr, axis=1)
+    # vectors
+    elif all([len(np.array(arr).shape) == 1 for arr in put_arr]):
+        put_arr = np.concatenate(put_arr, axis=0)
+    # scalar
+    else:
+        put_arr = np.array(put_arr[0])
+    return put_arr
+
+
 class TerraDataset:
 
     def __init__(self):
@@ -49,49 +67,70 @@ class TerraDataset:
     def create_dataset_object_from_instructions(self, put_instr, dataframe) -> Dataset:
 
         output_signature = [{}, {}]
+        length, step, offset, total_samples = 1, 1, 0, len(dataframe)
         for put_id, cols_dict in put_instr.items():
             put_array = []
             for col_name, put_data in cols_dict.items():
-                col_array = []
-                sample_array = self.create_put_array(dataframe.loc[0, col_name], put_data)
-                col_array.append(sample_array)
-                if self.preprocessing[col_name]:
-                    col_array = self.preprocess_put_array(
-                        np.array(sample_array), put_data, self.preprocessing[col_name]
+                if put_data.type in \
+                        [LayerInputTypeChoice.Timeseries, LayerOutputTypeChoice.Depth, LayerOutputTypeChoice.Trend]:
+                    length = put_data.parameters.length
+                    total_samples -= length * 2
+                    if put_data.type in [LayerOutputTypeChoice.Depth, LayerOutputTypeChoice.Trend]:
+                        offset = put_data.parameters.length
+                        if put_data.type == LayerOutputTypeChoice.Trend:
+                            offset -= 1
+                data_to_send = dataframe.loc[0 + offset:0 + offset + length - 1, col_name].to_list()
+                data_to_send = data_to_send[0] if len(data_to_send) == 1 else data_to_send
+                sample_array = self.create_put_array(data_to_send, put_data)
+                if self.preprocessing.get(col_name):
+                    sample_array = self.preprocess_put_array(
+                        sample_array, put_data, self.preprocessing[col_name]
                     )
-                put_array.append(col_array if len(col_array) > 1 else col_array[0])
-
-            if len(put_array) > 1:
-                put_array = np.concatenate(put_array, axis=1)
+                put_array.append(
+                    sample_array[0] if type(sample_array) == np.ndarray and len(sample_array) == 1 else sample_array
+                )
+            if put_data.type in [LayerInputTypeChoice.Timeseries, LayerOutputTypeChoice.Depth]:
+                put_array = np.expand_dims(np.array(put_array), 1)
+                put_array = postprocess_put_array(put_array, put_data.type)[0]
             else:
-                put_array = np.concatenate(put_array, axis=0)
+                put_array = postprocess_put_array(put_array, put_data.type)
 
             if put_data.type in LayerInputTypeChoice:
                 output_signature[0][put_id] = TensorSpec(shape=put_array.shape, dtype=put_array.dtype)
             else:
                 output_signature[1][put_id] = TensorSpec(shape=put_array.shape, dtype=put_array.dtype)
 
-        return Dataset.from_generator(lambda: self.generator(put_instr, dataframe),
+        return Dataset.from_generator(lambda: self.generator(put_instr, dataframe, length, step, total_samples),
                                       output_signature=tuple(output_signature))
 
-    def generator(self, put_instr, dataframe: pd.DataFrame):
+    def generator(self, put_instr, dataframe: pd.DataFrame, length, step, total_samples):
 
-        for i in range(len(dataframe)):
+        for i in range(0, total_samples, step):
             inp_dict, out_dict = {}, {}
             for put_id, cols_dict in put_instr.items():
                 put_array = []
                 for col_name, put_data in cols_dict.items():
-                    sample_array = self.create_put_array(dataframe.loc[i, col_name], put_data)
+                    offset = 0
+                    if put_data.type in [LayerOutputTypeChoice.Depth, LayerOutputTypeChoice.Trend]:
+                        offset = put_data.parameters.length
+                    data_to_send = dataframe.loc[i+offset: i+offset+length-1, col_name].to_list()
+                    data_to_send = data_to_send[0] if len(data_to_send) == 1 else data_to_send
+                    sample_array = self.create_put_array(data_to_send, put_data)
+
+                    # sample_array = self.create_put_array(dataframe.loc[i, col_name], put_data)
                     if self.preprocessing.get(col_name):
                         sample_array = self.preprocess_put_array(
                             sample_array, put_data, self.preprocessing[col_name]
                         )
-                    put_array.append(sample_array if len(sample_array) > 1 else sample_array[0])
+                    put_array.append(
+                        sample_array[0] if type(sample_array) == np.ndarray and len(sample_array) == 1 else sample_array
+                    )
 
-                if len(put_array) > 1:
-                    put_array = np.concatenate(put_array, axis=1)
+                if put_data.type in [LayerInputTypeChoice.Timeseries, LayerOutputTypeChoice.Depth]:
+                    put_array = np.expand_dims(np.array(put_array), 1)
+                    put_array = postprocess_put_array(put_array, put_data.type)[0]
                 else:
-                    put_array = np.concatenate(put_array, axis=0)
+                    put_array = postprocess_put_array(put_array, put_data.type)
 
                 if put_data.type in LayerInputTypeChoice:
                     inp_dict[put_id] = put_array
@@ -148,7 +187,9 @@ class TerraDataset:
                             else:
                                 self.preprocessing[col_name].fit(sample_array.reshape(-1, 1))
                         if not use_generator:
-                            col_array.append(sample_array)
+                            col_array.append(
+                                sample_array[0] if type(sample_array) == np.ndarray and len(sample_array) == 1 else sample_array
+                            )
 
                     if self.preprocessing.get(col_name) and not use_generator:
                         col_array = self.preprocess_put_array(
@@ -158,19 +199,11 @@ class TerraDataset:
                         put_array.append(col_array if len(col_array) > 1 else col_array[0])
 
                 if not use_generator:
-                    if put_data.type in [LayerInputTypeChoice.Timeseries, LayerOutputTypeChoice.Depth]:
-                        put_array = np.moveaxis(np.array(put_array), [1, 2], [0, 1])
-                    elif len(put_array) > 1:
-                        put_array = np.concatenate(put_array, axis=1)
-                    else:
-                        put_array = np.concatenate(put_array, axis=0)
-
+                    put_array = postprocess_put_array(put_array, put_data.type)
                     if isinstance(put_data, InputInstructionsData):
                         self.X[split][put_id] = put_array
                     else:
                         self.Y[split][put_id] = put_array
-            # if use_generator and split == "train":
-            #     continue
 
             if not use_generator:
                 self._dataset[split] = self.create_dataset_object_from_arrays(self.X[split], self.Y[split])
@@ -269,7 +302,7 @@ class CreateDataset(TerraDataset):
 
         self.dataset_data = DatasetData(
             task=self.input_type.value + self.output_type.value,
-            use_generator=self.data.use_generator,
+            use_generator=False,
             is_created=False,
         )
 
@@ -286,7 +319,7 @@ class CreateDataset(TerraDataset):
         puts_data = {}
 
         if data_type == LayerSelectTypeChoice.table:
-            for idx, put in enumerate(data.inputs + data.outputs, 1):
+            for idx, put in enumerate(data.inputs, 1):
                 puts_data[idx] = {}
                 for col_name in put.columns:
                     parameters_to_pass = {"csv_path": data.csv_path,
@@ -296,6 +329,10 @@ class CreateDataset(TerraDataset):
                     put_data = InputData(**parameters_to_pass) if put.type in LayerInputTypeChoice else OutputData(
                         **parameters_to_pass)
                     puts_data[idx][f"{idx}_{col_name}"] = put_data
+            puts_data[len(puts_data) + 1] = {f"{len(puts_data) + 1}_{data.output}": OutputData(
+                csv_path=data.csv_path, column=data.output, type=self.output_type, parameters=
+                getattr(outputs, f"{self.output_type}Validator")(**data.dict())
+            )}
 
         elif data_type == LayerSelectTypeChoice.folder:
             puts_data[1] = {f"1_{self.input_type.value}": InputData(
@@ -317,18 +354,16 @@ class CreateDataset(TerraDataset):
     def create_put_instructions(put_data) -> Dict[int, Dict[str, Union[InputInstructionsData, OutputInstructionsData]]]:
 
         new_put_data = {}
-        # preprocessing_data = {}
         for put_id, cols_dict in put_data.items():
             new_put_data[put_id] = {}
             for col_name, put_data in cols_dict.items():
                 data_to_pass = []
-                # preprocessing_data[col_name] = {}
                 if put_data.csv_path:
                     csv_table = pd.read_csv(put_data.csv_path, usecols=[put_data.column])
                     data_to_pass = csv_table.loc[:, put_data.column].tolist()
                     if put_data.type in [LayerInputTypeChoice.Image, LayerOutputTypeChoice.Segmentation]:
                         data_to_pass = [str(put_data.csv_path.parent.joinpath(elem)) for elem in data_to_pass]
-                    elif put_data.type == LayerInputTypeChoice.Categorical:
+                    elif put_data.type in [LayerInputTypeChoice.Categorical, LayerOutputTypeChoice.Classification]:
                         put_data.parameters.classes_names = list(set(data_to_pass))
                 else:
                     for folder_path in put_data.folder_path:
@@ -341,13 +376,6 @@ class CreateDataset(TerraDataset):
                     if put_data.parameters.pymorphy:
                         data_to_pass = apply_pymorphy(data_to_pass)
 
-                # if "preprocessing" in put_data.parameters.dict() and put_data.parameters.preprocessing.value not in \
-                #         ['None', TextProcessTypes.word_to_vec]:
-                #     preprocessing_data[col_name] = \
-                #         getattr(preprocessings, f"create_{put_data.parameters.preprocessing.name}")(
-                #             put_data.parameters
-                #         )
-
                 put_type = "Input" if put_data.type in LayerInputTypeChoice else "Output"
                 parameters = put_data.parameters
                 if put_data.type == LayerInputTypeChoice.Categorical:
@@ -356,7 +384,7 @@ class CreateDataset(TerraDataset):
                     type=put_data.type, parameters=parameters, data=data_to_pass
                 )
 
-        return new_put_data#, preprocessing_data
+        return new_put_data
 
     @staticmethod
     def create_table(put_instructions: Dict[int, Dict[str, Union[InputInstructionsData, OutputInstructionsData]]],
@@ -391,11 +419,9 @@ class CreateClassificationDataset(CreateDataset):
     def create_put_instructions(self, put_data) -> Dict[int, Dict[str, Union[InputInstructionsData, OutputInstructionsData]]]:
 
         new_put_data = {}
-        # preprocessing_data = {}
         for put_id, cols_dict in put_data.items():
             new_put_data[put_id] = {}
             for col_name, put_data in cols_dict.items():
-                # preprocessing_data[col_name] = None
                 if put_data.type in LayerInputTypeChoice:
                     data_to_pass = []
                     for folder_path in put_data.folder_path:
@@ -412,19 +438,12 @@ class CreateClassificationDataset(CreateDataset):
                     data_to_pass = self.y_classes
                     put_data.parameters.classes_names = [path.name for path in put_data.folder_path]
 
-                # if "preprocessing" in put_data.parameters.dict() and put_data.parameters.preprocessing.value not in\
-                #         ['None', TextProcessTypes.word_to_vec]:
-                #     preprocessing_data[col_name] = \
-                #         getattr(preprocessings, f"create_{put_data.parameters.preprocessing.name}")(
-                #             put_data.parameters
-                #         )
-
                 put_type = "Input" if put_data.type in LayerInputTypeChoice else "Output"
                 new_put_data[put_id][col_name] = getattr(creation_data, f"{put_type}InstructionsData")(
                     type=put_data.type, parameters=put_data.parameters, data=data_to_pass
                 )
 
-        return new_put_data#, preprocessing_data
+        return new_put_data
 
     def summary(self):
         super().summary()

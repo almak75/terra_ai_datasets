@@ -213,18 +213,41 @@ class Dataframe(CreateDataset):
 
     def __init__(
             self,
-            csv_path: str,
-            train_size: float,
-            inputs: list,
-            outputs: list,
             **kwargs
     ):
-        super().__init__(csv_path=csv_path, inputs=inputs, outputs=outputs,  train_size=train_size, **kwargs)
+        super().__init__(**kwargs)
 
 
 class DataframeRegression(Dataframe):
     input_type = LayerInputTypeChoice.Dataframe
     output_type = LayerOutputTypeChoice.Regression
+
+    def __init__(
+            self,
+            csv_path: str,
+            train_size: float,
+            inputs: list,
+            output: str,
+            preprocessing: str
+    ):
+        super().__init__(csv_path=csv_path, inputs=inputs, output=output,  train_size=train_size,
+                         preprocessing=preprocessing)
+
+
+class DataframeClassification(Dataframe):
+    input_type = LayerInputTypeChoice.Dataframe
+    output_type = LayerOutputTypeChoice.Classification
+
+    def __init__(
+            self,
+            csv_path: str,
+            train_size: float,
+            inputs: list,
+            output: str,
+            one_hot_encoding: bool,
+    ):
+        super().__init__(csv_path=csv_path, inputs=inputs, output=output,  train_size=train_size,
+                         one_hot_encoding=one_hot_encoding)
 
 
 class TimeseriesDepth(Dataframe):
@@ -251,7 +274,7 @@ class TimeseriesDepth(Dataframe):
         :param outputs: Список колонок, используемых в качестве выхода;
         :param preprocessing: Выбор скейлера. Варианты: "StandardScaler", "MinMaxScaler";
         :param length: Длина одного примера;
-        :param step: Шаг движения по аудиофайлу при составлении примеров;
+        :param step: Длина шага окна разбивки при составлении примеров;
         :param depth: Глубина предсказания;
         """
         super().__init__(csv_path=csv_path, inputs=inputs, outputs=outputs,  train_size=train_size,
@@ -261,20 +284,20 @@ class TimeseriesDepth(Dataframe):
             Dict[int, Union[Dict[Any, Any], Dict[str, InputData], Dict[str, OutputData]]]:
 
         puts_data = {1: {}, 2: {}}
-        for idx, col_name in enumerate(self.data.inputs, 1):
-            parameters_to_pass = {"csv_path": self.data.csv_path,
+        for idx, col_name in enumerate(data.inputs, 1):
+            parameters_to_pass = {"csv_path": data.csv_path,
                                   "column": col_name,
                                   "type": self.input_type,
                                   "parameters": getattr(val_inputs, f"{self.input_type.value}Validator")(
-                                      **self.data.dict())}
+                                      **data.dict())}
             put_data = InputData(**parameters_to_pass)
             puts_data[1][f"{idx}_{col_name}"] = put_data
-        for idx, col_name in enumerate(self.data.outputs, 1 + len(self.data.inputs)):
-            parameters_to_pass = {"csv_path": self.data.csv_path,
+        for idx, col_name in enumerate(data.outputs, 1 + len(data.inputs)):
+            parameters_to_pass = {"csv_path": data.csv_path,
                                   "column": col_name,
                                   "type": self.output_type,
                                   "parameters": getattr(val_outputs, f"{self.output_type.value}Validator")(
-                                      **self.data.dict())}
+                                      **data.dict())}
             put_data = OutputData(**parameters_to_pass)
             puts_data[2][f"{idx}_{col_name}"] = put_data
 
@@ -290,7 +313,7 @@ class TimeseriesTrend(Dataframe):
             csv_path: str,
             train_size: float,
             inputs: list,
-            outputs: list,
+            output: str,
             preprocessing: str,
             length: int,
             step: int,
@@ -303,14 +326,14 @@ class TimeseriesTrend(Dataframe):
         :param csv_path: Путь до csv-файла;
         :param train_size: Соотношение обучающей выборки к валидационной;
         :param inputs: Список колонок, используемых в качестве входа;
-        :param outputs: Список колонок, используемых в качестве выхода;
+        :param outputs: Колонка, используемая в качестве выхода;
         :param preprocessing: Выбор скейлера. Варианты: "StandardScaler", "MinMaxScaler";
         :param length: Длина одного примера;
         :param step: Шаг движения по аудиофайлу при составлении примеров;
         :param deviation: Отклонение нулевого тренда в процентах;
         :param one_hot_encoding: Перевод Y массивов в формат One-Hot Encoding.
         """
-        super().__init__(csv_path=csv_path, inputs=inputs, outputs=outputs,  train_size=train_size,
+        super().__init__(csv_path=csv_path, inputs=inputs, output=output,  train_size=train_size,
                          preprocessing=preprocessing, length=length, step=step, deviation=deviation,
                          one_hot_encoding=one_hot_encoding)
 
@@ -318,21 +341,20 @@ class TimeseriesTrend(Dataframe):
             Dict[int, Union[Dict[Any, Any], Dict[str, InputData], Dict[str, OutputData]]]:
 
         puts_data = {1: {}, 2: {}}
-        for idx, col_name in enumerate(self.data.inputs, 1):
-            parameters_to_pass = {"csv_path": self.data.csv_path,
+        for idx, col_name in enumerate(data.inputs, 1):
+            parameters_to_pass = {"csv_path": data.csv_path,
                                   "column": col_name,
                                   "type": self.input_type,
                                   "parameters": getattr(val_inputs, f"{self.input_type.value}Validator")(
-                                      **self.data.dict())}
+                                      **data.dict())}
             put_data = InputData(**parameters_to_pass)
             puts_data[1][f"{idx}_{col_name}"] = put_data
-        for idx, col_name in enumerate(self.data.outputs, 1 + len(self.data.inputs)):
-            parameters_to_pass = {"csv_path": self.data.csv_path,
-                                  "column": col_name,
-                                  "type": self.output_type,
-                                  "parameters": getattr(val_outputs, f"{self.output_type.value}Validator")(
-                                      **self.data.dict())}
-            put_data = OutputData(**parameters_to_pass)
-            puts_data[2][f"{idx}_{col_name}"] = put_data
+        parameters_to_pass = {"csv_path": data.csv_path,
+                              "column": data.output,
+                              "type": self.output_type,
+                              "parameters": getattr(val_outputs, f"{self.output_type.value}Validator")(
+                                  **data.dict())}
+        put_data = OutputData(**parameters_to_pass)
+        puts_data[2][f"{len(puts_data[1]) + 1}_{data.output}"] = put_data
 
         return puts_data

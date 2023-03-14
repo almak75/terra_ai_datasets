@@ -4,16 +4,13 @@ from pathlib import Path
 from typing import List
 
 from pydantic import BaseModel, validator
-from pydantic.types import PositiveFloat
 
 from terra_ai_datasets.creation.validators import inputs, outputs
-from terra_ai_datasets.creation.validators.inputs import TimeseriesValidator
 from terra_ai_datasets.creation.validators.tasks import LayerInputTypeChoice, LayerOutputTypeChoice
 
 
 # --- Common validators ---
 class CommonValidator(BaseModel):
-    use_generator: bool = False
     train_size: float
 
     @validator('train_size')
@@ -111,9 +108,17 @@ class DataframeOutputData(DataframePutData):
         return getattr(outputs, f'{values["type"].value}Validator')(**parameters)
 
 
-class DataframeDatasetValidator(FilePathValidator):
+class DataframeValidator(BaseModel):
     inputs: List[DataframeInputData]
-    outputs: List[DataframeOutputData]
+    output: str
+
+
+class DataframeClassificationValidator(FilePathValidator, DataframeValidator, outputs.ClassificationValidator):
+    pass
+
+
+class DataframeRegressionValidator(FilePathValidator, DataframeValidator, outputs.RegressionValidator):
+    pass
 
 
 class TimeseriesDepthValidator(FilePathValidator, inputs.TimeseriesValidator, outputs.DepthValidator):
@@ -123,4 +128,4 @@ class TimeseriesDepthValidator(FilePathValidator, inputs.TimeseriesValidator, ou
 
 class TimeseriesTrendValidator(FilePathValidator, inputs.TimeseriesValidator, outputs.TrendValidator):
     inputs: List[str]
-    outputs: List[str]
+    output: str

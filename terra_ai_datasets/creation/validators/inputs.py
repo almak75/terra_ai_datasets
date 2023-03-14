@@ -4,6 +4,8 @@ from typing import Optional, List
 from pydantic import BaseModel, validator
 from pydantic.types import PositiveInt, PositiveFloat
 
+# from terra_ai_datasets.creation.validators.dataset import DataframeInputData
+
 
 # --- Image validators ---
 class ImageScalers(str, Enum):
