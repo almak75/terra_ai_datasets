@@ -1,13 +1,17 @@
+import os
 from enum import Enum
 import logging
-from typing import Union
+from typing import Union, List
 
 import cv2
 import librosa
 import numpy as np
+import pandas as pd
 import pymorphy2
 from pathlib import Path
+from PIL import Image
 
+from sklearn.cluster import KMeans
 from tensorflow.keras.preprocessing.text import text_to_word_sequence
 
 from terra_ai_datasets.creation.validators.inputs import ImageProcessTypes, TextValidator, TextModeTypes, \
@@ -21,6 +25,10 @@ stream_handler.setFormatter(logger_formatter)
 logger = logging.getLogger(__name__)
 logger.addHandler(stream_handler)
 logger.setLevel("INFO")
+
+ANNOTATION_SEPARATOR = ":"
+ANNOTATION_LABEL_NAME = "# label"
+ANNOTATION_COLOR_RGB = "color_rgb"
 
 
 class DatasetFoldersData(Enum):
@@ -83,6 +91,17 @@ class DatasetPathsData:
     @property
     def config(self):
         return self.root_path.joinpath("config.json")
+
+
+def process_directory_paths(dir_paths: list) -> List[Path]:
+
+    list_of_directories = []
+    for dir_path in dir_paths:
+        for d_path, dir_names, _ in os.walk(dir_path):
+            if not dir_names:
+                list_of_directories.append(Path(d_path))
+
+    return list_of_directories
 
 
 def apply_pymorphy(data_to_process: list):
@@ -237,3 +256,64 @@ def resize_frame(image_array, target_shape, frame_mode):
             )
             resized = np.concatenate((resized, black_bar_2), axis=1)
     return resized
+
+
+def get_classes_autosearch(source, num_classes: int, mask_range: int, height, width, frame_mode):
+
+    def _rgb_in_range(rgb: tuple, target: tuple) -> bool:
+        _range0 = range(target[0] - mask_range, target[0] + mask_range)
+        _range1 = range(target[1] - mask_range, target[1] + mask_range)
+        _range2 = range(target[2] - mask_range, target[2] + mask_range)
+        return rgb[0] in _range0 and rgb[1] in _range1 and rgb[2] in _range2
+
+    source = process_directory_paths(source)
+
+    annotations = {}
+    for dirname in source:
+        for filepath in dirname.iterdir():
+            if len(annotations) >= num_classes:
+                break
+
+            array = np.asarray(Image.open(filepath))
+            array = resize_frame(image_array=array, target_shape=(height, width), frame_mode=frame_mode)
+
+            np_data = array.reshape(-1, 3)
+            km = KMeans(n_clusters=num_classes)
+            km.fit(np_data)
+
+            cluster_centers = (
+                np.round(km.cluster_centers_)
+                .astype("uint8")[: max(km.labels_) + 1]
+                .tolist()
+            )
+
+            for index, rgb in enumerate(cluster_centers, 1):
+                if rgb in annotations.values():
+                    continue
+
+                add_condition = True
+                for rgb_target in annotations.values():
+                    if _rgb_in_range(tuple(rgb), rgb_target):
+                        add_condition = False
+                        break
+
+                if add_condition:
+                    annotations[str(index)] = rgb
+
+    return annotations
+
+
+def get_classes_annotation(path: str):
+
+    path = Path(path)
+    assert path.is_file(), 'Путь до файла аннотации указан неверно'
+
+    data = pd.read_csv(path, sep=ANNOTATION_SEPARATOR)
+
+    annotations = {}
+    for row in data.iterrows():
+        index, row_data = row
+        annotations[getattr(row_data, ANNOTATION_LABEL_NAME)] = \
+            [int(num) for num in getattr(row_data, ANNOTATION_COLOR_RGB).split(',')]
+
+    return annotations

@@ -6,8 +6,9 @@ import joblib
 
 from terra_ai_datasets.creation.dataset import TerraDataset
 from terra_ai_datasets.creation.utils import DatasetPathsData
-from terra_ai_datasets.creation.validators import creation_data
+from terra_ai_datasets.creation.validators import creation_data, inputs, outputs
 from terra_ai_datasets.creation.validators.structure import DatasetData
+from terra_ai_datasets.creation.validators.tasks import LayerInputTypeChoice
 
 
 class LoadDataset(TerraDataset):
@@ -27,8 +28,14 @@ class LoadDataset(TerraDataset):
             if not self.put_instructions.get(int(put_id)):
                 self.put_instructions[int(put_id)] = {}
             with open(instr_path, 'r') as conf:
+                dict_data = json.loads(json.load(conf))
                 self.put_instructions[int(put_id)][f"{put_id}_{put_type}"] = \
-                    getattr(creation_data, f"{put.capitalize()}InstructionsData")(**json.loads(json.load(conf)))
+                    getattr(creation_data, f"{put.capitalize()}InstructionsData")(**dict_data)
+                put = self.put_instructions[int(put_id)][f'{put_id}_{put_type}']
+                self.put_instructions[int(put_id)][f"{put_id}_{put_type}"].parameters = \
+                    getattr(inputs, f"{put.type}Validator")(**dict_data['parameters']) \
+                    if put.type in LayerInputTypeChoice\
+                    else getattr(outputs, f"{put.type}Validator")(**dict_data['parameters'])
 
         with open(dataset_paths_data.config, 'r') as conf:
             self.dataset_data = DatasetData(**json.loads(json.load(conf)))

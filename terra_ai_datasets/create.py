@@ -1,6 +1,8 @@
+import os.path
 from typing import Dict, Union, Any
 
 from terra_ai_datasets.creation.dataset import CreateDataset, CreateClassificationDataset
+from terra_ai_datasets.creation.utils import get_classes_annotation, get_classes_autosearch
 from terra_ai_datasets.creation.validators.creation_data import InputData, OutputData
 from terra_ai_datasets.creation.validators import inputs as val_inputs
 from terra_ai_datasets.creation.validators import outputs as val_outputs
@@ -54,7 +56,9 @@ class ImageSegmentation(CreateDataset):
             network: str,
             process: str,
             rgb_range: int,
-            classes: Dict[str, list],
+            classes: Dict[str, list] = None,
+            num_classes: int = None,
+            classes_path: str = None,
             preprocessing: str = ImageScalers.none
     ):
         """
@@ -69,8 +73,15 @@ class ImageSegmentation(CreateDataset):
         :param network: Постобработка массивов под определенный вид нейронной сети. Варианты: "Convolutional", "Linear";
         :param preprocessing: Выбор скейлера. Варианты: "None", "MinMaxScaler", "TerraImageScaler";
         :param rgb_range: Диапазон, при котором пиксели будут отнесены к классу;
-        :param classes: Названия классов и их RGB значения в виде словаря.
+        :param classes: Названия классов и их RGB значения в виде словаря;
+        :param classes_path: Путь к txt файлу с указанием названия классов и их RGB значений.
         """
+        if not classes and not classes_path and num_classes:
+            classes = get_classes_autosearch(source=target_path, num_classes=num_classes, mask_range=rgb_range,
+                                             height=height, width=width, frame_mode=process)
+        elif not classes and classes_path:
+            classes = get_classes_annotation(classes_path)
+
         super().__init__(source_path=source_path, target_path=target_path, train_size=train_size,  width=width,
                          height=height, process=process, network=network, preprocessing=preprocessing,
                          rgb_range=rgb_range, classes=classes)
@@ -86,14 +97,6 @@ class ImageSegmentation(CreateDataset):
             puts_data[1][f"1_{self.input_type.value}"].parameters.process
 
         return puts_data
-
-    def summary(self):
-        super().summary()
-        text_to_print = f"\n\033[1mКлассы в масках сегментации и их цвета в RGB:\033[0m"
-        classes = self.put_instructions[2][f"2_{self.output_type.value}"].parameters.classes
-        for name, color in classes.items():
-            text_to_print += f"\n{name}: {color.as_rgb_tuple()}"
-        print(text_to_print)
 
 
 class TextClassification(CreateClassificationDataset):

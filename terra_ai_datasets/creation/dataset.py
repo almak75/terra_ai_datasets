@@ -1,7 +1,8 @@
 import json
+import os
 from pathlib import Path
 from datetime import datetime
-from typing import Union, Dict, Tuple, Any
+from typing import Union, Dict, Any, List
 
 from tensorflow.python.data.ops.dataset_ops import DatasetV2 as Dataset
 from tensorflow import TensorSpec
@@ -11,7 +12,7 @@ import pandas as pd
 import joblib
 
 from terra_ai_datasets.creation import arrays, preprocessings, utils
-from terra_ai_datasets.creation.utils import apply_pymorphy
+from terra_ai_datasets.creation.utils import apply_pymorphy, process_directory_paths
 from terra_ai_datasets.creation.validators import creation_data
 from terra_ai_datasets.creation.validators.creation_data import InputData, OutputData, InputInstructionsData, \
     OutputInstructionsData
@@ -243,6 +244,31 @@ class TerraDataset:
             for out_id, array in enumerate(self.Y["train"].values(), 1):
                 print(f"\033[1mРазмерность выходного массива {out_id}:\033[0m", array[0].shape)
 
+        put_id, col_name, output_type = None, None, None
+        for put_id, put_data in self.put_instructions.items():
+            for col_name, col_data in put_data.items():
+                if col_data.type in LayerOutputTypeChoice:
+                    output_type = col_data.type
+                    break
+
+        if output_type == LayerOutputTypeChoice.Classification:
+            print("\033[1mСписок классов и количество примеров:\033[0m")
+            classes_names = self.put_instructions[put_id][col_name].parameters.classes_names
+            dataframe_dict = {cl_name: [] for cl_name in classes_names}
+            for split in ['train', 'val']:
+                list_of_elements = self.dataframe[split].loc[:, col_name].tolist()
+                for cl_name in classes_names:
+                    dataframe_dict[cl_name].append(list_of_elements.count(cl_name))
+
+            print(pd.DataFrame(dataframe_dict, index=['train', 'val']))
+
+        elif output_type == LayerOutputTypeChoice.Segmentation:
+            text_to_print = "\033[1mКлассы в масках сегментации и их цвета в RGB:\033[0m"
+            classes = self.put_instructions[put_id][col_name].parameters.classes
+            for name, color in classes.items():
+                text_to_print += f"\n{name}: {color.as_rgb_tuple()}"
+            print(text_to_print)
+
     def save(self, save_path: str) -> None:
 
         def arrays_save(arrays_data: Dict[str, Dict[int, np.ndarray]], path_to_folder: Path):
@@ -336,13 +362,14 @@ class CreateDataset(TerraDataset):
 
         elif data_type == LayerSelectTypeChoice.folder:
             puts_data[1] = {f"1_{self.input_type.value}": InputData(
-                folder_path=data.source_path,
+                folder_path=process_directory_paths(data.source_path),
                 column=f"1_{self.input_type.value}",
                 type=self.input_type,
                 parameters=getattr(inputs, f"{self.input_type.value}Validator")(**data.dict())
             )}
             puts_data[2] = {f"2_{self.output_type.value}": OutputData(
-                folder_path=data.target_path if "target_path" in data.__fields_set__ else data.source_path,
+                folder_path=process_directory_paths(data.target_path) if "target_path" in data.__fields_set__
+                else process_directory_paths(data.source_path),
                 column=f"2_{self.output_type.value}",
                 type=self.output_type,
                 parameters=getattr(outputs, f"{self.output_type.value}Validator")(**data.dict())
@@ -416,7 +443,8 @@ class CreateClassificationDataset(CreateDataset):
         self.y_classes = []
         super().__init__(**kwargs)
 
-    def create_put_instructions(self, put_data) -> Dict[int, Dict[str, Union[InputInstructionsData, OutputInstructionsData]]]:
+    def create_put_instructions(self, put_data) -> \
+            Dict[int, Dict[str, Union[InputInstructionsData, OutputInstructionsData]]]:
 
         new_put_data = {}
         for put_id, cols_dict in put_data.items():
@@ -444,11 +472,3 @@ class CreateClassificationDataset(CreateDataset):
                 )
 
         return new_put_data
-
-    def summary(self):
-        super().summary()
-        all_classes = {name: self.y_classes.count(name) for name in set(self.y_classes)}
-        text_to_print = f"\n\033[1mСписок классов и количество примеров:\033[0m"
-        for name, count in all_classes.items():
-            text_to_print += f"\n\033[1m{name}:\033[0m {count}"
-        print(text_to_print)
