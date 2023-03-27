@@ -2,11 +2,17 @@ __version__ = "1.0.0"
 
 from setuptools import setup, find_packages
 
+DESCRIPTION = "Framework to create a dataset to train a neural network."
+LONG_DESCRIPTION = "terra_ai_datasets is a framework to create " \
+                   "a dataset to train a neural network model based on a Keras."
 
 setup(
     name="terra_ai_datasets",
     version=__version__,
     packages=find_packages(),
+    description=DESCRIPTION,
+    long_description=LONG_DESCRIPTION,
+    long_description_content_type='text/markdown',
     install_requires=[
         "pydantic>=1.8.2",
         "pandas>=1.3.5",
