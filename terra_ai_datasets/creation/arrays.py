@@ -79,7 +79,7 @@ class TextArray(Array):
                 elif parameters.mode == TextModeTypes.length_and_step and len(text_array) < parameters.length:
                     text_array += [0 for _ in range(parameters.length - len(text_array))]
             elif parameters.preprocessing == TextProcessTypes.bag_of_words:
-                text_array = preprocess_obj.texts_to_matrix([text])[0]
+                text_array = preprocess_obj.texts_to_matrix([text])[0].astype(np.int8)
             elif parameters.preprocessing == TextProcessTypes.word_to_vec:
                 text_array = []
                 for word in text.split(' '):
@@ -179,10 +179,10 @@ class ClassificationArray(Array):
 
     def create(self, source: str, parameters: ClassificationValidator):
 
-        array = parameters.classes_names.index(source)
+        array = np.array([parameters.classes_names.index(source)], dtype=np.uint8)
         if parameters.one_hot_encoding:
             zeros = np.zeros(len(parameters.classes_names), dtype=np.uint8)
-            zeros[array] = 1
+            zeros[array[0]] = 1
             array = zeros
 
         return array
