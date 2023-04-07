@@ -46,8 +46,8 @@ def postprocess_put_array(put_arr: list, put_data_type: Union[LayerInputTypeChoi
 class TerraDataset:
 
     def __init__(self):
-        self.X: Dict[str, Dict[int, np.ndarray]] = {"train": {}, "val": {}}
-        self.Y: Dict[str, Dict[int, np.ndarray]] = {"train": {}, "val": {}}
+        self.X: Dict[str, Dict[str, np.ndarray]] = {"train": {}, "val": {}}
+        self.Y: Dict[str, Dict[str, np.ndarray]] = {"train": {}, "val": {}}
         self.preprocessing: Dict[str, Any] = {}
         self.dataframe: Dict[str, pd.DataFrame] = {}
         self.dataset_data: DatasetData = None
@@ -62,13 +62,14 @@ class TerraDataset:
         return self._dataset
 
     @staticmethod
-    def create_dataset_object_from_arrays(x_arrays: Dict[int, np.ndarray], y_arrays: Dict[int, np.ndarray]) -> Dataset:
+    def create_dataset_object_from_arrays(x_arrays: Dict[str, np.ndarray], y_arrays: Dict[str, np.ndarray]) -> Dataset:
         return Dataset.from_tensor_slices((x_arrays, y_arrays))
 
     def create_dataset_object_from_instructions(self, put_instr, dataframe) -> Dataset:
 
         output_signature = [{}, {}]
         length, step, offset, total_samples = 1, 1, 0, len(dataframe)
+        inp_id, out_id = 1, 1
         for put_id, cols_dict in put_instr.items():
             put_array = []
             for col_name, put_data in cols_dict.items():
@@ -97,9 +98,11 @@ class TerraDataset:
                 put_array = postprocess_put_array(put_array, put_data.type)
 
             if put_data.type in LayerInputTypeChoice:
-                output_signature[0][put_id] = TensorSpec(shape=put_array.shape, dtype=put_array.dtype)
+                output_signature[0][f"input_{inp_id}"] = TensorSpec(shape=put_array.shape, dtype=put_array.dtype)
+                inp_id += 1
             else:
-                output_signature[1][put_id] = TensorSpec(shape=put_array.shape, dtype=put_array.dtype)
+                output_signature[1][f"output_{out_id}"] = TensorSpec(shape=put_array.shape, dtype=put_array.dtype)
+                out_id += 1
 
         return Dataset.from_generator(lambda: self.generator(put_instr, dataframe, length, step, total_samples),
                                       output_signature=tuple(output_signature))
@@ -107,6 +110,7 @@ class TerraDataset:
     def generator(self, put_instr, dataframe: pd.DataFrame, length, step, total_samples):
 
         for i in range(0, total_samples, step):
+            inp_id, out_id = 1, 1
             inp_dict, out_dict = {}, {}
             for put_id, cols_dict in put_instr.items():
                 put_array = []
@@ -134,15 +138,18 @@ class TerraDataset:
                     put_array = postprocess_put_array(put_array, put_data.type)
 
                 if put_data.type in LayerInputTypeChoice:
-                    inp_dict[put_id] = put_array
+                    inp_dict[f"input_{inp_id}"] = put_array
+                    inp_id += 1
                 else:
-                    out_dict[put_id] = put_array
+                    out_dict[f"output_{out_id}"] = put_array
+                    out_id += 1
 
             yield inp_dict, out_dict
 
     def create(self, use_generator: bool = False):
 
         for split, dataframe in self.dataframe.items():
+            inp_id, out_id = 1, 1
             for put_id, cols_dict in self.put_instructions.items():
                 if use_generator and split != "train":
                     continue
@@ -202,9 +209,11 @@ class TerraDataset:
                 if not use_generator:
                     put_array = postprocess_put_array(put_array, put_data.type)
                     if isinstance(put_data, InputInstructionsData):
-                        self.X[split][put_id] = put_array
+                        self.X[split][f"input_{inp_id}"] = put_array
+                        inp_id += 1
                     else:
-                        self.Y[split][put_id] = put_array
+                        self.Y[split][f"output_{out_id}"] = put_array
+                        out_id += 1
 
             if not use_generator:
                 self._dataset[split] = self.create_dataset_object_from_arrays(self.X[split], self.Y[split])

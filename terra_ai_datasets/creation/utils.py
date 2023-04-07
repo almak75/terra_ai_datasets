@@ -152,7 +152,7 @@ def extract_audio_data(folder_path: Path, parameters: AudioValidator):
         if parameters.mode == TextModeTypes.full:
             audio_samples.append(';'.join([str(audio_path), f"0:{parameters.max_seconds}"]))
         else:
-            duration = librosa.get_duration(filename=str(audio_path))
+            duration = librosa.get_duration(str(audio_path))
             start_idx, stop_idx = 0, parameters.length
             audio_samples.append(';'.join([str(audio_path), f"{start_idx}:{stop_idx}"]))
             while stop_idx < duration:
