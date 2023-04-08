@@ -253,7 +253,7 @@ class DepthArray(Array):
 
     def create(self, source: list, parameters: DepthValidator):
 
-        array = np.array(source)
+        array = np.array(source)[:parameters.depth]
         array = np.expand_dims(array, 1)
 
         return array

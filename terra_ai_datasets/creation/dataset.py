@@ -4,6 +4,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Union, Dict, Any, List
 
+from IPython.display import display
 from tensorflow.python.data.ops.dataset_ops import DatasetV2 as Dataset
 from tensorflow import TensorSpec
 from tqdm import tqdm
@@ -193,7 +194,7 @@ class TerraDataset:
                             elif put_data.type == LayerInputTypeChoice.Image and put_data.parameters.preprocessing == ImageScalers.terra_image_scaler:
                                 self.preprocessing[col_name].fit(sample_array)
                             else:
-                                self.preprocessing[col_name].fit(sample_array.reshape(-1, 1))
+                                self.preprocessing[col_name].partial_fit(sample_array.reshape(-1, 1))
                         if not use_generator:
                             col_array.append(
                                 sample_array[0] if type(sample_array) == np.ndarray and len(sample_array) == 1 else sample_array
@@ -243,7 +244,7 @@ class TerraDataset:
 
     def summary(self):
 
-        print(self.dataframe['train'].head())
+        display(self.dataframe['train'].head())
         print(f"\n\033[1mКол-во примеров в train выборке:\033[0m {len(self.dataframe['train'])}\n"
               f"\033[1mКол-во примеров в val выборке:\033[0m {len(self.dataframe['val'])}")
         print()
