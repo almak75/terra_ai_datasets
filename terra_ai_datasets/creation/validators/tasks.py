@@ -4,13 +4,9 @@ from enum import Enum
 class TasksChoice(str, Enum):
     ImageClassification = "ImageClassification"
     ImageSegmentation = "ImageSegmentation"
-    ImageRegression = "ImageRegression"
     TextClassification = "TextClassification"
-    TextSegmentation = "TextSegmentation"
-    TextRegression = "TextRegression"
     AudioClassification = "AudioClassification"
     DataframeClassification = "DataframeClassification"
-    DataframeDataset = "DataframeDataset"
     DataframeRegression = "DataframeRegression"
     TimeseriesDepth = "TimeseriesDepth"
     TimeseriesTrend = "TimeseriesTrend"

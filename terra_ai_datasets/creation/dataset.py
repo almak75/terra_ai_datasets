@@ -1,8 +1,7 @@
 import json
-import os
 from pathlib import Path
 from datetime import datetime
-from typing import Union, Dict, Any, List
+from typing import Union, Dict, Any
 
 from IPython.display import display
 from tensorflow.python.data.ops.dataset_ops import DatasetV2 as Dataset
@@ -12,8 +11,9 @@ import numpy as np
 import pandas as pd
 import joblib
 
-from terra_ai_datasets.creation import arrays, preprocessings, utils
-from terra_ai_datasets.creation.utils import apply_pymorphy, process_directory_paths
+from terra_ai_datasets.creation import preprocessings, utils, visualize
+from terra_ai_datasets.creation.utils import apply_pymorphy, process_directory_paths, decamelize, create_put_array, \
+    preprocess_put_array
 from terra_ai_datasets.creation.validators import creation_data
 from terra_ai_datasets.creation.validators.creation_data import InputData, OutputData, InputInstructionsData, \
     OutputInstructionsData
@@ -84,9 +84,9 @@ class TerraDataset:
                             offset -= 1
                 data_to_send = dataframe.loc[0 + offset:0 + offset + length - 1, col_name].to_list()
                 data_to_send = data_to_send[0] if len(data_to_send) == 1 else data_to_send
-                sample_array = self.create_put_array(data_to_send, put_data)
+                sample_array = create_put_array(data_to_send, put_data)
                 if self.preprocessing.get(col_name):
-                    sample_array = self.preprocess_put_array(
+                    sample_array = preprocess_put_array(
                         sample_array, put_data, self.preprocessing[col_name]
                     )
                 put_array.append(
@@ -121,11 +121,11 @@ class TerraDataset:
                         offset = put_data.parameters.length
                     data_to_send = dataframe.loc[i+offset: i+offset+length-1, col_name].to_list()
                     data_to_send = data_to_send[0] if len(data_to_send) == 1 else data_to_send
-                    sample_array = self.create_put_array(data_to_send, put_data)
+                    sample_array = create_put_array(data_to_send, put_data)
 
-                    # sample_array = self.create_put_array(dataframe.loc[i, col_name], put_data)
+                    # sample_array = create_put_array(dataframe.loc[i, col_name], put_data)
                     if self.preprocessing.get(col_name):
-                        sample_array = self.preprocess_put_array(
+                        sample_array = preprocess_put_array(
                             sample_array, put_data, self.preprocessing[col_name]
                         )
                     put_array.append(
@@ -186,7 +186,7 @@ class TerraDataset:
                     ):
                         data_to_send = dataframe.loc[row_idx+offset:row_idx+offset+length-1, col_name].to_list()
                         data_to_send = data_to_send[0] if len(data_to_send) == 1 else data_to_send
-                        sample_array = self.create_put_array(data_to_send, put_data)
+                        sample_array = create_put_array(data_to_send, put_data)
                         if self.preprocessing.get(col_name) and split == "train":
                             if put_data.type == LayerInputTypeChoice.Text:
                                 if put_data.parameters.preprocessing != TextProcessTypes.word_to_vec:
@@ -201,7 +201,7 @@ class TerraDataset:
                             )
 
                     if self.preprocessing.get(col_name) and not use_generator:
-                        col_array = self.preprocess_put_array(
+                        col_array = preprocess_put_array(
                             np.array(col_array), put_data, self.preprocessing[col_name]
                         )
                     if not use_generator:
@@ -224,23 +224,22 @@ class TerraDataset:
                 )
         self.dataset_data.is_created = True
 
-    @staticmethod
-    def create_put_array(data: Any, put_data: Union[InputInstructionsData, OutputInstructionsData]):
-
-        sample_array = getattr(arrays, f"{put_data.type}Array")().create(data, put_data.parameters)
-
-        return sample_array
-
-    @staticmethod
-    def preprocess_put_array(
-            data: Any, put_data: Union[InputInstructionsData, OutputInstructionsData], preprocessing: Any
-    ):
-
-        preprocessed_array = getattr(arrays, f"{put_data.type}Array")().preprocess(
-            data, preprocessing, put_data.parameters
+    def visualize(self):
+        getattr(visualize, f"visualize_{decamelize(self.dataset_data.task)}")(
+            put_instructions=self.put_instructions,
+            preprocessing=self.preprocessing
         )
 
-        return preprocessed_array
+    def evaluate_on_model(self, model, batch_size: int, num_batches: int = None):
+        batches_passed = 0
+        predict_data = []
+        for inp, out in self.dataset["val"].batch(batch_size):
+            predict_data.append(model.predict(inp))
+            batches_passed += 1
+            if batches_passed == num_batches:
+                break
+
+        return np.concatenate(np.array(predict_data), axis=0)
 
     def summary(self):
 
@@ -270,7 +269,7 @@ class TerraDataset:
                 for cl_name in classes_names:
                     dataframe_dict[cl_name].append(list_of_elements.count(cl_name))
 
-            print(pd.DataFrame(dataframe_dict, index=['train', 'val']))
+            display(pd.DataFrame(dataframe_dict, index=['train', 'val']))
 
         elif output_type == LayerOutputTypeChoice.Segmentation:
             text_to_print = "\033[1mКлассы в масках сегментации и их цвета в RGB:\033[0m"
