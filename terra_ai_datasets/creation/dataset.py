@@ -189,8 +189,7 @@ class TerraDataset:
                         sample_array = create_put_array(data_to_send, put_data)
                         if self.preprocessing.get(col_name) and split == "train":
                             if put_data.type == LayerInputTypeChoice.Text:
-                                if put_data.parameters.preprocessing != TextProcessTypes.word_to_vec:
-                                    self.preprocessing[col_name].fit_on_texts(sample_array.split())
+                                pass
                             elif put_data.type == LayerInputTypeChoice.Image and put_data.parameters.preprocessing == ImageScalers.terra_image_scaler:
                                 self.preprocessing[col_name].fit(sample_array)
                             else:
@@ -199,6 +198,11 @@ class TerraDataset:
                             col_array.append(
                                 sample_array[0] if type(sample_array) == np.ndarray and len(sample_array) == 1 else sample_array
                             )
+
+                    if self.preprocessing.get(col_name) and split == "train":
+                        if put_data.type == LayerInputTypeChoice.Text:
+                            if put_data.parameters.preprocessing != TextProcessTypes.word_to_vec:
+                                self.preprocessing[col_name].fit_on_texts(col_array)
 
                     if self.preprocessing.get(col_name) and not use_generator:
                         col_array = preprocess_put_array(
