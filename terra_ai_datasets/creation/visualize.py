@@ -1,6 +1,7 @@
 import random
 
 import matplotlib.pyplot as plt
+import numpy as np
 
 from terra_ai_datasets.creation.utils import create_put_array, preprocess_put_array
 
@@ -105,6 +106,8 @@ def visualize_timeseries_trend(put_instructions, preprocessing):
             col_data.data[y_instructions.parameters.length: + y_instructions.parameters.length + 2],
             y_instructions
         )
+        if y_instructions.parameters.one_hot_encoding:
+            y_array = np.argmax(y_array)
         if y_array == 1:
             color = "green"
         elif y_array == 2:
