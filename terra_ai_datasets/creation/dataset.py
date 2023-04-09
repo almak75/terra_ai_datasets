@@ -230,18 +230,10 @@ class TerraDataset:
             preprocessing=self.preprocessing
         )
 
-    def evaluate_on_model(self, model, batch_size: int, num_batches: int = None):
-        batches_passed = 0
-        true_date = []
-        predict_data = []
+    def evaluate_on_model(self, model, batch_size: int):
         for inp, out in self.dataset["val"].batch(batch_size):
-            true_date.append(out["output_1"])
-            predict_data.append(model.predict(inp))
-            batches_passed += 1
-            if batches_passed == num_batches:
-                break
-
-        return np.concatenate(np.array(true_date), axis=0), np.concatenate(np.array(predict_data), axis=0)
+            pred = model.predict(inp)
+            yield inp, out, pred
 
     def summary(self):
 
