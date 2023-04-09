@@ -16,6 +16,7 @@ from sklearn.cluster import KMeans
 from tensorflow.keras.preprocessing.text import text_to_word_sequence
 
 from terra_ai_datasets.creation import arrays
+from terra_ai_datasets.creation.arrays import resize_frame
 from terra_ai_datasets.creation.validators.creation_data import InputInstructionsData, OutputInstructionsData
 from terra_ai_datasets.creation.validators.inputs import ImageProcessTypes, TextValidator, TextModeTypes, \
     ImageValidator, AudioValidator
@@ -188,7 +189,6 @@ def extract_audio_data(folder_path: Path, parameters: AudioValidator):
                 stop_idx += parameters.step
                 audio_samples.append(';'.join([str(audio_path), f"{start_idx}:{stop_idx}"]))
     return audio_samples
-
 
 
 def get_classes_autosearch(source, num_classes: int, mask_range: int, height, width, frame_mode):
