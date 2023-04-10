@@ -13,11 +13,11 @@ def test_image_classification_minmax():
     dataset.create(use_generator=True)
 
     for inp, out in dataset.dataset['train'].batch(4):
-        assert inp[1].shape == (4, 64*80*3), 'Input shape does not match'
-        assert out[2].shape == (4, 2), 'Output shape does not match'
+        assert inp["input_1"].shape == (4, 64*80*3), 'Input shape does not match'
+        assert out["output_1"].shape == (4, 2), 'Output shape does not match'
 
-        assert inp[1].dtype == np.float32, 'Input outputs wrong datatype'
-        assert out[2].dtype == np.uint8, 'Output outputs wrong datatype'
+        assert inp["input_1"].dtype == np.float32, 'Input outputs wrong datatype'
+        assert out["output_1"].dtype == np.uint8, 'Output outputs wrong datatype'
 
         break
 
@@ -30,11 +30,11 @@ def test_image_classification_terra_image():
     dataset.create()
 
     for inp, out in dataset.dataset['train'].batch(6):
-        assert inp[1].shape == (6, 128, 160, 3), 'Input shape does not match'
-        assert out[2].shape == (6, ), 'Output shape does not match'
+        assert inp["input_1"].shape == (6, 128, 160, 3), 'Input shape does not match'
+        assert out["output_1"].shape == (6, ), 'Output shape does not match'
 
-        assert inp[1].dtype == np.float32
-        assert out[2].dtype == np.uint8
+        assert inp["input_1"].dtype == np.float32
+        assert out["output_1"].dtype == np.uint8
 
         break
 
@@ -48,11 +48,11 @@ def test_image_classification_no_scaler():
     dataset.create()
 
     for inp, out in dataset.dataset['train'].batch(6):
-        assert inp[1].shape == (6, 64, 80, 3), 'Input shape does not match'
-        assert out[2].shape == (6, 3), 'Output shape does not match'
+        assert inp["input_1"].shape == (6, 64, 80, 3), 'Input shape does not match'
+        assert out["output_1"].shape == (6, 3), 'Output shape does not match'
 
-        assert inp[1].dtype == np.uint8
-        assert out[2].dtype == np.uint8
+        assert inp["input_1"].dtype == np.uint8
+        assert out["output_1"].dtype == np.uint8
 
         break
 
@@ -74,11 +74,11 @@ def test_text_classification_emb():
     dataset.create()
 
     for inp, out in dataset.dataset['train'].batch(2):
-        assert inp[1].shape == (2, 100), 'Input shape does not match'
-        assert out[2].shape == (2, 3), 'Output shape does not match'
+        assert inp["input_1"].shape == (2, 100), 'Input shape does not match'
+        assert out["output_1"].shape == (2, 3), 'Output shape does not match'
 
-        assert inp[1].dtype == np.int32
-        assert out[2].dtype == np.uint8
+        assert inp["input_1"].dtype == np.int32
+        assert out["output_1"].dtype == np.uint8
 
         break
 
@@ -99,11 +99,11 @@ def test_text_classification_bow():
     dataset.create(use_generator=True)
 
     for inp, out in dataset.dataset['train'].batch(3):
-        assert inp[1].shape == (3, 10000), 'Input shape does not match'
-        assert out[2].shape == (3, 10), 'Output shape does not match'
+        assert inp["input_1"].shape == (3, 10000), 'Input shape does not match'
+        assert out["output_1"].shape == (3, 10), 'Output shape does not match'
 
-        assert inp[1].dtype == np.int8
-        assert out[2].dtype == np.uint8
+        assert inp["input_1"].dtype == np.int8
+        assert out["output_1"].dtype == np.uint8
 
         break
 
@@ -126,11 +126,11 @@ def test_text_classification_w2v():
     dataset.create(use_generator=True)
 
     for inp, out in dataset.dataset['train'].batch(16):
-        assert inp[1].shape == (16, 100, 50), 'Input shape does not match'
-        assert out[2].shape == (16, 10), 'Output shape does not match'
+        assert inp["input_1"].shape == (16, 100, 50), 'Input shape does not match'
+        assert out["output_1"].shape == (16, 10), 'Output shape does not match'
 
-        assert inp[1].dtype == np.float64
-        assert out[2].dtype == np.uint8
+        assert inp["input_1"].dtype == np.float64
+        assert out["output_1"].dtype == np.uint8
 
         break
 
@@ -155,20 +155,20 @@ def test_audio_classification():
     dataset.create(use_generator=True)
 
     for inp, out in dataset.dataset['train'].batch(16):
-        assert inp[1].shape == (16, 11025), 'Input shape does not match'
-        assert inp[2].shape == (16, 22, 20), 'Input shape does not match'
-        assert inp[3].shape == (16, 22), 'Input shape does not match'
-        assert out[4].shape == (16, 2), 'Output shape does not match'
+        assert inp["input_1"].shape == (16, 11025), 'Input shape does not match'
+        assert inp["input_2"].shape == (16, 22, 20), 'Input shape does not match'
+        assert inp["input_3"].shape == (16, 22), 'Input shape does not match'
+        assert out["output_1"].shape == (16, 2), 'Output shape does not match'
 
-        assert inp[1].dtype == np.float32
-        assert inp[2].dtype == np.float32
-        assert inp[3].dtype == np.float32
-        assert out[4].dtype == np.uint8
+        assert inp["input_1"].dtype == np.float32
+        assert inp["input_2"].dtype == np.float32
+        assert inp["input_3"].dtype == np.float32
+        assert out["output_1"].dtype == np.uint8
 
         break
 
 
-def test_audio_classification():
+def test_dataframe_classification():
     dataset = DataframeClassification(
         csv_path='./tests/dataset/flats/flats_cut.csv',
         train_size=0.5,
@@ -183,14 +183,14 @@ def test_audio_classification():
     dataset.create()
 
     for inp, out in dataset.dataset['train'].batch(4):
-        assert inp[1].shape == (4, 11), 'Input shape does not match'
-        assert inp[2].shape == (4, ), 'Input shape does not match'
-        assert inp[3].shape == (4, 10), 'Input shape does not match'
-        assert out[4].shape == (4, ), 'Output shape does not match'
+        assert inp["input_1"].shape == (4, 11), 'Input shape does not match'
+        assert inp["input_2"].shape == (4, ), 'Input shape does not match'
+        assert inp["input_3"].shape == (4, 10), 'Input shape does not match'
+        assert out["output_1"].shape == (4, ), 'Output shape does not match'
 
-        assert inp[1].dtype == np.uint8
-        assert inp[2].dtype == np.int32
-        assert inp[3].dtype == np.int32
-        assert out[4].dtype == np.uint8
+        assert inp["input_1"].dtype == np.uint8
+        assert inp["input_2"].dtype == np.int32
+        assert inp["input_3"].dtype == np.int32
+        assert out["output_1"].dtype == np.uint8
 
         break

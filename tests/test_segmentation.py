@@ -12,11 +12,11 @@ def test_segmentation_minmax_automatic():
     dataset.create()
 
     for inp, out in dataset.dataset['train'].batch(16):
-        assert inp[1].shape == (16, 80, 64, 3), 'Input shape does not match'
-        assert out[2].shape == (16, 80, 64, 2), 'Output shape does not match'
+        assert inp["input_1"].shape == (16, 80, 64, 3), 'Input shape does not match'
+        assert out["output_1"].shape == (16, 80, 64, 2), 'Output shape does not match'
 
-        assert inp[1].dtype == np.float32
-        assert out[2].dtype == np.uint8
+        assert inp["input_1"].dtype == np.float32
+        assert out["output_1"].dtype == np.uint8
 
         break
 
@@ -29,10 +29,10 @@ def test_segmentation_no_scaler_from_file():
     dataset.create(use_generator=True)
 
     for inp, out in dataset.dataset['train'].batch(16):
-        assert inp[1].shape == (16, 40, 32, 3), 'Input shape does not match'
-        assert out[2].shape == (16, 40, 32, 2), 'Output shape does not match'
+        assert inp["input_1"].shape == (16, 40, 32, 3), 'Input shape does not match'
+        assert out["output_1"].shape == (16, 40, 32, 2), 'Output shape does not match'
 
-        assert inp[1].dtype == np.uint8
-        assert out[2].dtype == np.uint8
+        assert inp["input_1"].dtype == np.uint8
+        assert out["output_1"].dtype == np.uint8
 
         break
