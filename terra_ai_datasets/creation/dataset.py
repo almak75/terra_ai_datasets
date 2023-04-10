@@ -1,9 +1,9 @@
 import json
-import os
 from pathlib import Path
 from datetime import datetime
-from typing import Union, Dict, Any, List
+from typing import Union, Dict, Any
 
+from IPython.display import display
 from tensorflow.python.data.ops.dataset_ops import DatasetV2 as Dataset
 from tensorflow import TensorSpec
 from tqdm import tqdm
@@ -11,8 +11,9 @@ import numpy as np
 import pandas as pd
 import joblib
 
-from terra_ai_datasets.creation import arrays, preprocessings, utils
-from terra_ai_datasets.creation.utils import apply_pymorphy, process_directory_paths
+from terra_ai_datasets.creation import preprocessings, utils, visualize
+from terra_ai_datasets.creation.utils import apply_pymorphy, process_directory_paths, decamelize, create_put_array, \
+    preprocess_put_array
 from terra_ai_datasets.creation.validators import creation_data
 from terra_ai_datasets.creation.validators.creation_data import InputData, OutputData, InputInstructionsData, \
     OutputInstructionsData
@@ -46,8 +47,8 @@ def postprocess_put_array(put_arr: list, put_data_type: Union[LayerInputTypeChoi
 class TerraDataset:
 
     def __init__(self):
-        self.X: Dict[str, Dict[int, np.ndarray]] = {"train": {}, "val": {}}
-        self.Y: Dict[str, Dict[int, np.ndarray]] = {"train": {}, "val": {}}
+        self.X: Dict[str, Dict[str, np.ndarray]] = {"train": {}, "val": {}}
+        self.Y: Dict[str, Dict[str, np.ndarray]] = {"train": {}, "val": {}}
         self.preprocessing: Dict[str, Any] = {}
         self.dataframe: Dict[str, pd.DataFrame] = {}
         self.dataset_data: DatasetData = None
@@ -62,13 +63,14 @@ class TerraDataset:
         return self._dataset
 
     @staticmethod
-    def create_dataset_object_from_arrays(x_arrays: Dict[int, np.ndarray], y_arrays: Dict[int, np.ndarray]) -> Dataset:
+    def create_dataset_object_from_arrays(x_arrays: Dict[str, np.ndarray], y_arrays: Dict[str, np.ndarray]) -> Dataset:
         return Dataset.from_tensor_slices((x_arrays, y_arrays))
 
     def create_dataset_object_from_instructions(self, put_instr, dataframe) -> Dataset:
 
         output_signature = [{}, {}]
         length, step, offset, total_samples = 1, 1, 0, len(dataframe)
+        inp_id, out_id = 1, 1
         for put_id, cols_dict in put_instr.items():
             put_array = []
             for col_name, put_data in cols_dict.items():
@@ -82,9 +84,9 @@ class TerraDataset:
                             offset -= 1
                 data_to_send = dataframe.loc[0 + offset:0 + offset + length - 1, col_name].to_list()
                 data_to_send = data_to_send[0] if len(data_to_send) == 1 else data_to_send
-                sample_array = self.create_put_array(data_to_send, put_data)
+                sample_array = create_put_array(data_to_send, put_data)
                 if self.preprocessing.get(col_name):
-                    sample_array = self.preprocess_put_array(
+                    sample_array = preprocess_put_array(
                         sample_array, put_data, self.preprocessing[col_name]
                     )
                 put_array.append(
@@ -97,9 +99,11 @@ class TerraDataset:
                 put_array = postprocess_put_array(put_array, put_data.type)
 
             if put_data.type in LayerInputTypeChoice:
-                output_signature[0][put_id] = TensorSpec(shape=put_array.shape, dtype=put_array.dtype)
+                output_signature[0][f"input_{inp_id}"] = TensorSpec(shape=put_array.shape, dtype=put_array.dtype)
+                inp_id += 1
             else:
-                output_signature[1][put_id] = TensorSpec(shape=put_array.shape, dtype=put_array.dtype)
+                output_signature[1][f"output_{out_id}"] = TensorSpec(shape=put_array.shape, dtype=put_array.dtype)
+                out_id += 1
 
         return Dataset.from_generator(lambda: self.generator(put_instr, dataframe, length, step, total_samples),
                                       output_signature=tuple(output_signature))
@@ -107,6 +111,7 @@ class TerraDataset:
     def generator(self, put_instr, dataframe: pd.DataFrame, length, step, total_samples):
 
         for i in range(0, total_samples, step):
+            inp_id, out_id = 1, 1
             inp_dict, out_dict = {}, {}
             for put_id, cols_dict in put_instr.items():
                 put_array = []
@@ -116,11 +121,11 @@ class TerraDataset:
                         offset = put_data.parameters.length
                     data_to_send = dataframe.loc[i+offset: i+offset+length-1, col_name].to_list()
                     data_to_send = data_to_send[0] if len(data_to_send) == 1 else data_to_send
-                    sample_array = self.create_put_array(data_to_send, put_data)
+                    sample_array = create_put_array(data_to_send, put_data)
 
-                    # sample_array = self.create_put_array(dataframe.loc[i, col_name], put_data)
+                    # sample_array = create_put_array(dataframe.loc[i, col_name], put_data)
                     if self.preprocessing.get(col_name):
-                        sample_array = self.preprocess_put_array(
+                        sample_array = preprocess_put_array(
                             sample_array, put_data, self.preprocessing[col_name]
                         )
                     put_array.append(
@@ -134,15 +139,18 @@ class TerraDataset:
                     put_array = postprocess_put_array(put_array, put_data.type)
 
                 if put_data.type in LayerInputTypeChoice:
-                    inp_dict[put_id] = put_array
+                    inp_dict[f"input_{inp_id}"] = put_array
+                    inp_id += 1
                 else:
-                    out_dict[put_id] = put_array
+                    out_dict[f"output_{out_id}"] = put_array
+                    out_id += 1
 
             yield inp_dict, out_dict
 
     def create(self, use_generator: bool = False):
 
         for split, dataframe in self.dataframe.items():
+            inp_id, out_id = 1, 1
             for put_id, cols_dict in self.put_instructions.items():
                 if use_generator and split != "train":
                     continue
@@ -178,22 +186,26 @@ class TerraDataset:
                     ):
                         data_to_send = dataframe.loc[row_idx+offset:row_idx+offset+length-1, col_name].to_list()
                         data_to_send = data_to_send[0] if len(data_to_send) == 1 else data_to_send
-                        sample_array = self.create_put_array(data_to_send, put_data)
+                        sample_array = create_put_array(data_to_send, put_data)
                         if self.preprocessing.get(col_name) and split == "train":
                             if put_data.type == LayerInputTypeChoice.Text:
-                                if put_data.parameters.preprocessing != TextProcessTypes.word_to_vec:
-                                    self.preprocessing[col_name].fit_on_texts(sample_array.split())
+                                pass
                             elif put_data.type == LayerInputTypeChoice.Image and put_data.parameters.preprocessing == ImageScalers.terra_image_scaler:
                                 self.preprocessing[col_name].fit(sample_array)
                             else:
-                                self.preprocessing[col_name].fit(sample_array.reshape(-1, 1))
+                                self.preprocessing[col_name].partial_fit(sample_array.reshape(-1, 1))
                         if not use_generator:
                             col_array.append(
                                 sample_array[0] if type(sample_array) == np.ndarray and len(sample_array) == 1 else sample_array
                             )
 
+                    if self.preprocessing.get(col_name) and split == "train":
+                        if put_data.type == LayerInputTypeChoice.Text:
+                            if put_data.parameters.preprocessing != TextProcessTypes.word_to_vec:
+                                self.preprocessing[col_name].fit_on_texts(col_array)
+
                     if self.preprocessing.get(col_name) and not use_generator:
-                        col_array = self.preprocess_put_array(
+                        col_array = preprocess_put_array(
                             np.array(col_array), put_data, self.preprocessing[col_name]
                         )
                     if not use_generator:
@@ -202,9 +214,11 @@ class TerraDataset:
                 if not use_generator:
                     put_array = postprocess_put_array(put_array, put_data.type)
                     if isinstance(put_data, InputInstructionsData):
-                        self.X[split][put_id] = put_array
+                        self.X[split][f"input_{inp_id}"] = put_array
+                        inp_id += 1
                     else:
-                        self.Y[split][put_id] = put_array
+                        self.Y[split][f"output_{out_id}"] = put_array
+                        out_id += 1
 
             if not use_generator:
                 self._dataset[split] = self.create_dataset_object_from_arrays(self.X[split], self.Y[split])
@@ -214,27 +228,20 @@ class TerraDataset:
                 )
         self.dataset_data.is_created = True
 
-    @staticmethod
-    def create_put_array(data: Any, put_data: Union[InputInstructionsData, OutputInstructionsData]):
-
-        sample_array = getattr(arrays, f"{put_data.type}Array")().create(data, put_data.parameters)
-
-        return sample_array
-
-    @staticmethod
-    def preprocess_put_array(
-            data: Any, put_data: Union[InputInstructionsData, OutputInstructionsData], preprocessing: Any
-    ):
-
-        preprocessed_array = getattr(arrays, f"{put_data.type}Array")().preprocess(
-            data, preprocessing, put_data.parameters
+    def visualize(self):
+        getattr(visualize, f"visualize_{decamelize(self.dataset_data.task)}")(
+            put_instructions=self.put_instructions,
+            preprocessing=self.preprocessing
         )
 
-        return preprocessed_array
+    def evaluate_on_model(self, model, batch_size: int):
+        for inp, out in self.dataset["val"].batch(batch_size):
+            pred = model.predict(inp)
+            yield inp, out, pred
 
     def summary(self):
 
-        print(self.dataframe['train'].head())
+        display(self.dataframe['train'].head())
         print(f"\n\033[1mКол-во примеров в train выборке:\033[0m {len(self.dataframe['train'])}\n"
               f"\033[1mКол-во примеров в val выборке:\033[0m {len(self.dataframe['val'])}")
         print()
@@ -260,7 +267,7 @@ class TerraDataset:
                 for cl_name in classes_names:
                     dataframe_dict[cl_name].append(list_of_elements.count(cl_name))
 
-            print(pd.DataFrame(dataframe_dict, index=['train', 'val']))
+            display(pd.DataFrame(dataframe_dict, index=['train', 'val']))
 
         elif output_type == LayerOutputTypeChoice.Segmentation:
             text_to_print = "\033[1mКлассы в масках сегментации и их цвета в RGB:\033[0m"

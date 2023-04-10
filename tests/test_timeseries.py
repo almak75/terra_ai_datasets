@@ -18,11 +18,11 @@ def test_timeseries_depth():
     dataset.create(use_generator=True)
 
     for inp, out in dataset.dataset['train'].batch(4):
-        assert inp[1].shape == (4, 30, 4), 'Input shape does not match'
-        assert out[2].shape == (4, 30, 2), 'Output shape does not match'
+        assert inp["input_1"].shape == (4, 30, 4), 'Input shape does not match'
+        assert out["output_1"].shape == (4, 10, 2), 'Output shape does not match'
 
-        assert inp[1].dtype == np.float64
-        assert out[2].dtype == np.float64
+        assert inp["input_1"].dtype == np.float64
+        assert out["output_1"].dtype == np.float64
 
         break
 
@@ -43,10 +43,10 @@ def test_timeseries_trend():
     dataset.create()
 
     for inp, out in dataset.dataset['train'].batch(4):
-        assert inp[1].shape == (4, 100, 4), 'Input shape does not match'
-        assert out[2].shape == (4, ), 'Output shape does not match'
+        assert inp["input_1"].shape == (4, 100, 4), 'Input shape does not match'
+        assert out["output_1"].shape == (4, ), 'Output shape does not match'
 
-        assert inp[1].dtype == np.float64
-        assert out[2].dtype == np.int32
+        assert inp["input_1"].dtype == np.float64
+        assert out["output_1"].dtype == np.int32
 
         break

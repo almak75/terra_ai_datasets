@@ -19,14 +19,14 @@ def test_regression():
     dataset.create(use_generator=True)
 
     for inp, out in dataset.dataset['train'].batch(4):
-        assert inp[1].shape == (4, 11), 'Input shape does not match'
-        assert inp[2].shape == (4, ), 'Input shape does not match'
-        assert inp[3].shape == (4, 100), 'Input shape does not match'
-        assert out[4].shape == (4, ), 'Output shape does not match'
+        assert inp["input_1"].shape == (4, 11), 'Input shape does not match'
+        assert inp["input_2"].shape == (4, ), 'Input shape does not match'
+        assert inp["input_3"].shape == (4, 100), 'Input shape does not match'
+        assert out["output_1"].shape == (4, ), 'Output shape does not match'
 
-        assert inp[1].dtype == np.uint8
-        assert inp[2].dtype == np.int32
-        assert inp[3].dtype == np.int32
-        assert out[4].dtype == np.float64
+        assert inp["input_1"].dtype == np.uint8
+        assert inp["input_2"].dtype == np.int32
+        assert inp["input_3"].dtype == np.int32
+        assert out["output_1"].dtype == np.float64
 
         break

@@ -1,7 +1,8 @@
-import os
-from enum import Enum
 import logging
-from typing import Union, List
+import os
+import re
+from enum import Enum
+from typing import Union, List, Any
 
 import cv2
 import librosa
@@ -14,6 +15,9 @@ from PIL import Image
 from sklearn.cluster import KMeans
 from tensorflow.keras.preprocessing.text import text_to_word_sequence
 
+from terra_ai_datasets.creation import arrays
+from terra_ai_datasets.creation.arrays import resize_frame
+from terra_ai_datasets.creation.validators.creation_data import InputInstructionsData, OutputInstructionsData
 from terra_ai_datasets.creation.validators.inputs import ImageProcessTypes, TextValidator, TextModeTypes, \
     ImageValidator, AudioValidator
 from terra_ai_datasets.creation.validators.outputs import SegmentationValidator
@@ -35,6 +39,7 @@ class DatasetFoldersData(Enum):
     arrays = "arrays"
     instructions = "instructions"
     preprocessing = "preprocessing"
+    sources = "sources"
 
 
 class DatasetPutsData(Enum):
@@ -86,11 +91,35 @@ class DatasetPathsData:
         self.arrays = DatasetFoldersPutsData(root_path.joinpath(DatasetFoldersData.arrays.value))
         self.instructions = DatasetInstructionsFoldersData(root_path.joinpath(DatasetFoldersData.instructions.value))
         self.preprocessing = root_path.joinpath(DatasetFoldersData.preprocessing.value)
+        self.sources = root_path.joinpath(DatasetFoldersData.sources.value)
         self.preprocessing.mkdir(exist_ok=True)
+        self.sources.mkdir(exist_ok=True)
 
     @property
     def config(self):
         return self.root_path.joinpath("config.json")
+
+
+def decamelize(camel_case_string: str):
+    string = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", camel_case_string)
+    return re.sub("([a-z0-9])([A-Z0-9])", r"\1_\2", string).lower()
+
+
+def create_put_array(data: Any, put_data: Union[InputInstructionsData, OutputInstructionsData]):
+    sample_array = getattr(arrays, f"{put_data.type}Array")().create(data, put_data.parameters)
+
+    return sample_array
+
+
+def preprocess_put_array(
+        data: Any, put_data: Union[InputInstructionsData, OutputInstructionsData], preprocessing: Any
+):
+
+    preprocessed_array = getattr(arrays, f"{put_data.type}Array")().preprocess(
+        data, preprocessing, put_data.parameters
+    )
+
+    return preprocessed_array
 
 
 def process_directory_paths(dir_paths: list) -> List[Path]:
@@ -152,7 +181,7 @@ def extract_audio_data(folder_path: Path, parameters: AudioValidator):
         if parameters.mode == TextModeTypes.full:
             audio_samples.append(';'.join([str(audio_path), f"0:{parameters.max_seconds}"]))
         else:
-            duration = librosa.get_duration(filename=str(audio_path))
+            duration = librosa.get_duration(str(audio_path))
             start_idx, stop_idx = 0, parameters.length
             audio_samples.append(';'.join([str(audio_path), f"{start_idx}:{stop_idx}"]))
             while stop_idx < duration:
@@ -160,102 +189,6 @@ def extract_audio_data(folder_path: Path, parameters: AudioValidator):
                 stop_idx += parameters.step
                 audio_samples.append(';'.join([str(audio_path), f"{start_idx}:{stop_idx}"]))
     return audio_samples
-
-
-def resize_frame(image_array, target_shape, frame_mode):
-    original_shape = (image_array.shape[0], image_array.shape[1])
-    resized = None
-    if frame_mode == ImageProcessTypes.stretch:
-        resized = cv2.resize(image_array, (target_shape[1], target_shape[0]))
-
-    elif frame_mode == ImageProcessTypes.fit:
-        if image_array.shape[1] >= image_array.shape[0]:
-            resized_shape = list(target_shape).copy()
-            resized_shape[0] = int(
-                image_array.shape[0] / (image_array.shape[1] / target_shape[1])
-            )
-            if resized_shape[0] > target_shape[0]:
-                resized_shape = list(target_shape).copy()
-                resized_shape[1] = int(
-                    image_array.shape[1] / (image_array.shape[0] / target_shape[0])
-                )
-            image_array = cv2.resize(image_array, (resized_shape[1], resized_shape[0]))
-        elif image_array.shape[0] >= image_array.shape[1]:
-            resized_shape = list(target_shape).copy()
-            resized_shape[1] = int(
-                image_array.shape[1] / (image_array.shape[0] / target_shape[0])
-            )
-            if resized_shape[1] > target_shape[1]:
-                resized_shape = list(target_shape).copy()
-                resized_shape[0] = int(
-                    image_array.shape[0] / (image_array.shape[1] / target_shape[1])
-                )
-            image_array = cv2.resize(image_array, (resized_shape[1], resized_shape[0]))
-        resized = image_array
-        if resized.shape[0] < target_shape[0]:
-            black_bar = np.zeros(
-                (int((target_shape[0] - resized.shape[0]) / 2), resized.shape[1], 3),
-                dtype="uint8",
-            )
-            resized = np.concatenate((black_bar, resized))
-            black_bar_2 = np.zeros(
-                (int((target_shape[0] - resized.shape[0])), resized.shape[1], 3),
-                dtype="uint8",
-            )
-            resized = np.concatenate((resized, black_bar_2))
-        if resized.shape[1] < target_shape[1]:
-            black_bar = np.zeros(
-                (target_shape[0], int((target_shape[1] - resized.shape[1]) / 2), 3),
-                dtype="uint8",
-            )
-            resized = np.concatenate((black_bar, resized), axis=1)
-            black_bar_2 = np.zeros(
-                (target_shape[0], int((target_shape[1] - resized.shape[1])), 3),
-                dtype="uint8",
-            )
-            resized = np.concatenate((resized, black_bar_2), axis=1)
-
-    elif frame_mode == ImageProcessTypes.cut:
-        resized = image_array.copy()
-        if original_shape[0] > target_shape[0]:
-            resized = resized[
-                int(original_shape[0] / 2 - target_shape[0] / 2) : int(
-                    original_shape[0] / 2 - target_shape[0] / 2
-                )
-                + target_shape[0],
-                :,
-            ]
-        else:
-            black_bar = np.zeros(
-                (int((target_shape[0] - original_shape[0]) / 2), original_shape[1], 3),
-                dtype="uint8",
-            )
-            resized = np.concatenate((black_bar, resized))
-            black_bar_2 = np.zeros(
-                (int((target_shape[0] - resized.shape[0])), original_shape[1], 3),
-                dtype="uint8",
-            )
-            resized = np.concatenate((resized, black_bar_2))
-        if original_shape[1] > target_shape[1]:
-            resized = resized[
-                :,
-                int(original_shape[1] / 2 - target_shape[1] / 2) : int(
-                    original_shape[1] / 2 - target_shape[1] / 2
-                )
-                + target_shape[1],
-            ]
-        else:
-            black_bar = np.zeros(
-                (target_shape[0], int((target_shape[1] - original_shape[1]) / 2), 3),
-                dtype="uint8",
-            )
-            resized = np.concatenate((black_bar, resized), axis=1)
-            black_bar_2 = np.zeros(
-                (target_shape[0], int((target_shape[1] - resized.shape[1])), 3),
-                dtype="uint8",
-            )
-            resized = np.concatenate((resized, black_bar_2), axis=1)
-    return resized
 
 
 def get_classes_autosearch(source, num_classes: int, mask_range: int, height, width, frame_mode):
