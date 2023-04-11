@@ -110,7 +110,7 @@ def create_embedding(parameters: TextValidator):
 def create_word_to_vec(text_list: list, parameters: TextValidator):
 
     text_list = [elem.split(' ') for elem in text_list]
-    word2vec = Word2Vec(text_list, size=parameters.word2vec_size)
+    word2vec = Word2Vec(text_list, vector_size=parameters.word2vec_size)
     return word2vec
 
 
